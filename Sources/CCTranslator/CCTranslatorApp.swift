@@ -50,9 +50,11 @@ private struct MenuContent: View {
         HistoryMenu(history: .shared)
         Divider()
         Button(L10n.settings) {
+            guard !SettingsWindow.focusIfOpen() else { return }
             // A menu bar app isn't active by default, so the window would open behind others.
             NSApp.activate()
             openSettings()
+            SettingsWindow.centerWhenShown()
         }
         .keyboardShortcut(",")
         Divider()
@@ -101,5 +103,56 @@ private struct HistoryMenu: View {
     private static func menuLine(_ text: String) -> String {
         let line = text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
         return line.count > 60 ? String(line.prefix(59)) + "…" : line
+    }
+}
+
+/// SwiftUI opens Settings where macOS last left it, which is often at the top of the screen.
+private enum SettingsWindow {
+    /// `openSettings()` leaves an already open window where it is, often behind other apps' windows,
+    /// so bring it forward ourselves, restoring it from the Dock if it was minimized.
+    static func focusIfOpen() -> Bool {
+        guard let window = find(), window.isVisible || window.isMiniaturized else { return false }
+        NSApp.activate()
+        if window.isMiniaturized { window.deminiaturize(nil) }
+        window.makeKeyAndOrderFront(nil)
+        // Activation is cooperative since macOS 14 and can be declined; this still raises the window.
+        window.orderFrontRegardless()
+        return true
+    }
+
+    /// The window appears a moment after `openSettings()`, so wait for it before centering.
+    static func centerWhenShown() {
+        Task {
+            for _ in 0..<25 {
+                if let window = find(), window.isVisible {
+                    window.layoutIfNeeded()
+                    center(window)
+                    return
+                }
+                try? await Task.sleep(for: .milliseconds(20))
+            }
+        }
+    }
+
+    private static func find() -> NSWindow? {
+        NSApp.windows.first { $0.identifier?.rawValue == "com_apple_SwiftUI_Settings_window" }
+            // The popup panel and menu bar windows are untitled, so the titled one is Settings.
+            ?? NSApp.windows.first { $0.styleMask.contains(.titled) && ($0.isVisible || $0.isMiniaturized) }
+    }
+
+    /// Share of the free vertical space left above the window; under half sits it a little above
+    /// center, which reads as centered (and leaves room to grow down when a taller tab opens).
+    private static let spaceAboveShare: CGFloat = 0.4
+
+    /// Centers on the screen with the pointer: the one whose menu bar was just clicked.
+    private static func center(_ window: NSWindow) {
+        let screen = NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? NSScreen.main
+        guard let visible = screen?.visibleFrame else { return }
+        let size = window.frame.size
+        let freeHeight = max(visible.height - size.height, 0)
+        window.setFrameOrigin(NSPoint(
+            x: visible.midX - size.width / 2,
+            y: visible.minY + freeHeight * (1 - spaceAboveShare)
+        ))
     }
 }

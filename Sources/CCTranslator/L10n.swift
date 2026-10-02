@@ -26,6 +26,7 @@ nonisolated enum L10n {
     static let quit = pick("Выйти", "Quit")
 
     // Settings
+    static let languagesTab = pick("Языки", "Languages")
     static let translation = pick("Перевод", "Translation")
     static let myLanguage = pick("Мой язык", "My language")
     static let downloadedLanguages = pick("Скачанные языки", "Downloaded languages")
