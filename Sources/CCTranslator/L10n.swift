@@ -17,6 +17,11 @@ enum L10n {
     static let shortcutHint = pick("⌘C C — перевести выделенное", "⌘C C — translate selection")
     static let allowAccessibility = pick("Разрешить Универсальный доступ…", "Allow Accessibility Access…")
     static let settings = pick("Настройки…", "Settings…")
+    static let history = pick("История переводов", "Translation History")
+    static let historyEmpty = pick("Пока пусто", "No translations yet")
+    static let historyHint = pick("Удерживайте ⌥, чтобы скопировать оригинал", "Hold ⌥ to copy the original")
+    static let copyOriginal = pick("Скопировать оригинал", "Copy original")
+    static let clearHistory = pick("Очистить историю", "Clear History")
     static let quit = pick("Выйти", "Quit")
 
     // Settings

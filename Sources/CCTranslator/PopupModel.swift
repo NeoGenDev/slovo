@@ -122,7 +122,7 @@ final class PopupModel {
         do {
             try await session.prepareTranslation()
             let response = try await session.translate(sourceText)
-            if let pair { settings.remember(pair) }
+            if let pair { didTranslate(pair, into: response.targetText) }
             animated {
                 translation = response.targetText
                 phase = .result
@@ -145,7 +145,7 @@ final class PopupModel {
             do {
                 let response = try await session.translate(sourceText)
                 guard !Task.isCancelled else { return }
-                settings.remember(pair)
+                didTranslate(pair, into: response.targetText)
                 animated {
                     translation = response.targetText
                     isRefreshing = false
@@ -165,6 +165,11 @@ final class PopupModel {
         @unknown default:
             fail(L10n.translationUnavailable)
         }
+    }
+
+    private func didTranslate(_ pair: LanguagePair, into translation: String) {
+        settings.remember(pair)
+        TranslationHistory.shared.record(source: sourceText, translation: translation, pair: pair)
     }
 
     private func fail(_ message: String) {
