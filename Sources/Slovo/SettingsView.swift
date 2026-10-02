@@ -440,6 +440,7 @@ private struct AIPane: View {
     @State private var keyDraft = ""
     /// Models offered by the OpenAI-compatible server, for the model field's list.
     @State private var models: [String] = []
+    @State private var claudeModels: [ClaudeModel] = []
     @State private var isLoadingModels = false
     @State private var modelsError: String?
 
@@ -465,9 +466,31 @@ private struct AIPane: View {
     private var claudeSection: some View {
         Section {
             keyRow(for: .claude, placeholder: "sk-ant-…")
-            Picker(L10n.claudeModel, selection: $settings.claudeModel) {
-                ForEach(ClaudeModel.allCases) { model in
-                    Text(model.title).tag(model)
+            if settings.hasClaudeKey {
+                LabeledContent(L10n.claudeModel) {
+                    VStack(alignment: .trailing, spacing: 4) {
+                        HStack(spacing: 6) {
+                            if isLoadingModels {
+                                ProgressView().controlSize(.small)
+                            }
+                            Picker(L10n.claudeModel, selection: claudeModelSelection) {
+                                ForEach(claudeModels) { model in
+                                    Text(model.name).tag(model.id)
+                                }
+                                // The saved model while the list loads, or if it failed to.
+                                if !settings.claudeModel.isEmpty, !claudeModels.contains(where: { $0.id == settings.claudeModel }) {
+                                    Text(verbatim: settings.claudeModel).tag(settings.claudeModel)
+                                }
+                            }
+                            .labelsHidden()
+                            .fixedSize()
+                        }
+                        if let modelsError {
+                            Text(modelsError)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
             }
         } footer: {
@@ -481,6 +504,43 @@ private struct AIPane: View {
                 }
                 .buttonStyle(.link)
             }
+        }
+        .task(id: settings.hasClaudeKey) {
+            await loadClaudeModels()
+        }
+    }
+
+    private var claudeModelSelection: Binding<String> {
+        Binding {
+            settings.claudeModel
+        } set: { id in
+            if let model = claudeModels.first(where: { $0.id == id }) {
+                settings.selectClaudeModel(model)
+            }
+        }
+    }
+
+    private func loadClaudeModels() async {
+        guard let key = settings.claudeKey else {
+            claudeModels = []
+            modelsError = nil
+            return
+        }
+        isLoadingModels = true
+        defer { isLoadingModels = false }
+        do {
+            let loaded = try await ClaudeTranslator.models(apiKey: key)
+            guard !Task.isCancelled else { return }
+            claudeModels = loaded
+            modelsError = loaded.isEmpty ? L10n.aiNoModels : nil
+            // Newest first: a fresh setup, or a model the account no longer offers, gets the newest one.
+            if let newest = loaded.first, !loaded.contains(where: { $0.id == settings.claudeModel }) {
+                settings.selectClaudeModel(newest)
+            }
+        } catch {
+            guard !Task.isCancelled else { return }
+            claudeModels = []
+            modelsError = L10n.aiModelsFailed(error.localizedDescription)
         }
     }
 

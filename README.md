@@ -51,7 +51,7 @@ Settings are split into four tabs:
 | General | Shortcuts for translating the selection (⌘C C by default) and a screen area (⇧⌘2), Open at Login |
 | Languages | Your language, downloaded languages, downloading new ones |
 | Excluded Apps | Apps where Slovo's shortcuts are off |
-| AI | The provider: Claude (API key and model: Opus 5.5, Sonnet 5.5 or Haiku 4.5) or an OpenAI-compatible API (address, optional key, and a model picked from the server's list or typed in). Keys are kept in the Keychain |
+| AI | The provider: Claude (API key and a model from your account's list) or an OpenAI-compatible API (address, optional key, and a model picked from the server's list or typed in). Keys are kept in the Keychain |
 
 <p align="center">
   <img src="docs/images/settings.png" width="570" alt="The General tab of Slovo's settings with the two shortcuts and Open at Login">

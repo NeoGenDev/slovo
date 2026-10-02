@@ -18,27 +18,12 @@ enum AIProvider: String, CaseIterable, Identifiable {
     }
 }
 
-/// Claude models offered for "Improve with AI".
-enum ClaudeModel: String, CaseIterable, Identifiable {
-    case opus = "claude-opus-5-5"
-    case sonnet = "claude-sonnet-5-5"
-    case haiku = "claude-haiku-4-5"
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .opus: L10n.claudeOpusTitle
-        case .sonnet: L10n.claudeSonnetTitle
-        case .haiku: L10n.claudeHaikuTitle
-        }
-    }
-
-    /// `output_config.effort` and server-side `fallbacks` exist on the 5.x models;
-    /// Haiku 4.5 rejects `effort` with a 400 and has no fallback models.
-    var supportsEffortAndFallbacks: Bool {
-        self != .haiku
-    }
+/// A model from Anthropic's `GET /v1/models`, which lists what the key's account can use, newest first.
+struct ClaudeModel: Identifiable, Hashable {
+    let id: String
+    let name: String
+    /// Whether the model takes `output_config.effort` with the `low` level; older and smaller models reject it.
+    let supportsLowEffort: Bool
 }
 
 /// An API key in the login Keychain.
@@ -90,8 +75,14 @@ final class AISettings {
         didSet { UserDefaults.standard.set(provider.rawValue, forKey: Keys.provider) }
     }
 
-    var claudeModel: ClaudeModel {
-        didSet { UserDefaults.standard.set(claudeModel.rawValue, forKey: Keys.claudeModel) }
+    /// The model ID; empty until a model is picked, and then the newest one on the account is used.
+    var claudeModel: String {
+        didSet { UserDefaults.standard.set(claudeModel, forKey: Keys.claudeModel) }
+    }
+
+    /// Remembered with the model so a request doesn't need the model list first.
+    var claudeModelSupportsLowEffort: Bool {
+        didSet { UserDefaults.standard.set(claudeModelSupportsLowEffort, forKey: Keys.claudeModelSupportsLowEffort) }
     }
 
     /// The API root, e.g. https://api.openai.com/v1 or http://localhost:11434/v1 for Ollama.
@@ -111,6 +102,7 @@ final class AISettings {
     private enum Keys {
         static let provider = "aiProvider"
         static let claudeModel = "claudeModel"
+        static let claudeModelSupportsLowEffort = "claudeModelSupportsLowEffort"
         static let openAIBaseURL = "openAIBaseURL"
         static let openAIModel = "openAIModel"
     }
@@ -122,7 +114,8 @@ final class AISettings {
     init() {
         let defaults = UserDefaults.standard
         provider = defaults.string(forKey: Keys.provider).flatMap(AIProvider.init(rawValue:)) ?? .claude
-        claudeModel = defaults.string(forKey: Keys.claudeModel).flatMap(ClaudeModel.init(rawValue:)) ?? .opus
+        claudeModel = defaults.string(forKey: Keys.claudeModel) ?? ""
+        claudeModelSupportsLowEffort = defaults.object(forKey: Keys.claudeModelSupportsLowEffort) as? Bool ?? true
         openAIBaseURL = defaults.string(forKey: Keys.openAIBaseURL) ?? Self.defaultOpenAIBaseURL
         openAIModel = defaults.string(forKey: Keys.openAIModel) ?? ""
         hasClaudeKey = claudeSecret.value != nil
@@ -175,6 +168,11 @@ final class AISettings {
             hasOpenAIKey = openAISecret.save(trimmed)
             return hasOpenAIKey
         }
+    }
+
+    func selectClaudeModel(_ model: ClaudeModel) {
+        claudeModel = model.id
+        claudeModelSupportsLowEffort = model.supportsLowEffort
     }
 
     func removeKey(for provider: AIProvider) {

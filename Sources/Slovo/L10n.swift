@@ -75,12 +75,9 @@ nonisolated enum L10n {
         "OpenAI, OpenRouter, локальные Ollama (http://localhost:11434/v1) и LM Studio. Локальным серверам ключ не нужен.",
         "OpenAI, OpenRouter, or a local Ollama (http://localhost:11434/v1) or LM Studio. Local servers need no key."
     )
-    static let claudeOpusTitle = pick("Claude Opus 5.5 — точнее всего", "Claude Opus 5.5 — most accurate")
-    static let claudeSonnetTitle = pick("Claude Sonnet 5.5 — быстрее", "Claude Sonnet 5.5 — faster")
-    static let claudeHaikuTitle = pick("Claude Haiku 4.5 — самая быстрая", "Claude Haiku 4.5 — fastest")
     static let claudeFooter = pick(
-        "Кнопка ✦ в попапе (⌘I) отправляет оригинал и перевод в Anthropic, и выбранная модель переписывает перевод естественнее. Запросы оплачиваются по тарифам Anthropic API.",
-        "The ✦ button in the popup (⌘I) sends the original and the translation to Anthropic, and the selected model rewrites the translation to read more naturally. Requests are billed at Anthropic API rates."
+        "Кнопка ✦ в попапе (⌘I) отправляет оригинал и перевод в Anthropic, и выбранная модель переписывает перевод естественнее.",
+        "The ✦ button in the popup (⌘I) sends the original and the translation to Anthropic, and the selected model rewrites the translation to read more naturally."
     )
     static let general = pick("Общие", "General")
     static let shortcuts = pick("Сочетания клавиш", "Shortcuts")

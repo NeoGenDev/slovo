@@ -9,7 +9,14 @@ enum AITranslator {
         switch settings.provider {
         case .claude:
             guard let key = settings.claudeKey else { throw AIFailure.invalidKey }
-            return try await ClaudeTranslator.complete(system: system, user: user, model: settings.claudeModel, apiKey: key)
+            if settings.claudeModel.isEmpty {
+                guard let newest = try await ClaudeTranslator.models(apiKey: key).first else { throw AIFailure.message(L10n.aiNoModels) }
+                settings.selectClaudeModel(newest)
+            }
+            return try await ClaudeTranslator.complete(
+                system: system, user: user, model: settings.claudeModel,
+                lowEffort: settings.claudeModelSupportsLowEffort, apiKey: key
+            )
         case .openAICompatible:
             guard let url = settings.openAIURL else { throw AIFailure.message(L10n.aiInvalidAddress) }
             return try await OpenAICompatibleTranslator.complete(

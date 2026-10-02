@@ -3,8 +3,58 @@ import Foundation
 /// Claude's Messages API, called over HTTPS directly: Anthropic has no Swift SDK.
 enum ClaudeTranslator {
     private static let endpoint = URL(string: "https://api.anthropic.com/v1/messages")!
+    private static let modelsEndpoint = URL(string: "https://api.anthropic.com/v1/models?limit=1000")!
 
-    static func complete(system: String, user: String, model: ClaudeModel, apiKey: String) async throws -> String {
+    /// `lowEffort` also turns on server-side fallback, which exists only on models that take `effort`.
+    /// If the API rejects either option for this model, the request is repeated without them.
+    static func complete(system: String, user: String, model: String, lowEffort: Bool, apiKey: String) async throws -> String {
+        do {
+            return try await send(system: system, user: user, model: model, lowEffort: lowEffort, apiKey: apiKey)
+        } catch RequestError.badRequest(let failure) {
+            guard lowEffort else { throw failure }
+        }
+        do {
+            return try await send(system: system, user: user, model: model, lowEffort: false, apiKey: apiKey)
+        } catch RequestError.badRequest(let failure) {
+            throw failure
+        }
+    }
+
+    /// The models the key's account can use, newest first.
+    static func models(apiKey: String) async throws -> [ClaudeModel] {
+        var request = URLRequest(url: modelsEndpoint, timeoutInterval: 20)
+        request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
+        request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await URLSession.shared.data(for: request)
+        } catch {
+            throw AIFailure.network(error.localizedDescription)
+        }
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard status == 200 else { throw failure(status: status, body: data) }
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        guard let list = try? decoder.decode(ModelList.self, from: data) else {
+            throw AIFailure.message(L10n.aiNoModelList)
+        }
+        return list.data.map { model in
+            let effort = model.capabilities?.effort
+            return ClaudeModel(
+                id: model.id,
+                name: model.displayName ?? model.id,
+                supportsLowEffort: effort?.supported == true && effort?.low?.supported == true
+            )
+        }
+    }
+
+    /// A 400: the request itself was refused, so it may succeed without the optional parameters.
+    private enum RequestError: Error {
+        case badRequest(AIFailure)
+    }
+
+    private static func send(system: String, user: String, model: String, lowEffort: Bool, apiKey: String) async throws -> String {
         var request = URLRequest(url: endpoint, timeoutInterval: 120)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "content-type")
@@ -12,7 +62,7 @@ enum ClaudeTranslator {
         request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
 
         var body: [String: Any] = [
-            "model": model.rawValue,
+            "model": model,
             "max_tokens": 16000,
             "stream": true,
             "system": system,
@@ -20,7 +70,7 @@ enum ClaudeTranslator {
                 ["role": "user", "content": user],
             ],
         ]
-        if model.supportsEffortAndFallbacks {
+        if lowEffort {
             // Translation is a short, latency-sensitive task; thinking stays on, low effort keeps it brief.
             body["output_config"] = ["effort": "low"]
             // Server-side fallback: if a safety classifier declines the text (rare false positives on
@@ -41,7 +91,9 @@ enum ClaudeTranslator {
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
             var data = Data()
             for try await byte in bytes { data.append(byte) }
-            throw failure(status: (response as? HTTPURLResponse)?.statusCode ?? 0, body: data)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            if status == 400 { throw RequestError.badRequest(failure(status: status, body: data)) }
+            throw failure(status: status, body: data)
         }
 
         // Streamed so a long text can't hit a request timeout; the popup shows the result at the end.
@@ -113,6 +165,29 @@ enum ClaudeTranslator {
         let delta: Delta?
         let contentBlock: Block?
         let error: APIError?
+    }
+
+    private struct ModelList: Decodable {
+        struct Model: Decodable {
+            let id: String
+            let displayName: String?
+            let capabilities: Capabilities?
+        }
+
+        struct Capabilities: Decodable {
+            let effort: Effort?
+        }
+
+        struct Effort: Decodable {
+            let supported: Bool
+            let low: Support?
+        }
+
+        struct Support: Decodable {
+            let supported: Bool
+        }
+
+        let data: [Model]
     }
 
     private struct ErrorEnvelope: Decodable {
