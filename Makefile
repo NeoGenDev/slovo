@@ -1,6 +1,6 @@
 APP := build/Slovo.app
 
-.PHONY: build run clean
+.PHONY: build run release clean
 
 build:
 	./scripts/build-app.sh
@@ -8,6 +8,9 @@ build:
 run: build
 	-pkill -x Slovo
 	open "$(APP)"
+
+release:
+	./scripts/release.sh
 
 clean:
 	rm -rf .build build

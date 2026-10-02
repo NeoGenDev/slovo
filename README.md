@@ -75,6 +75,18 @@ Settings are split into four tabs:
 - Accessibility permission, for the selection shortcut and Replace
 - Screen Recording permission, only for ⇧⌘2; macOS asks the first time
 
+## Install
+
+Download the latest `Slovo-<version>.dmg` from [Releases](https://github.com/NeoGenDev/slovo/releases), open it and drag Slovo into Applications.
+
+Slovo isn't signed with an Apple Developer ID yet, so the first launch is blocked: macOS can't verify who made the app. To open it anyway, go to **System Settings → Privacy & Security**, find the message about Slovo and click **Open Anyway**. Or clear the download flag in Terminal:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Slovo.app
+```
+
+Then allow Slovo in **Privacy & Security → Accessibility**, and later in **Screen Recording** when you first press ⇧⌘2. Without a Developer ID signature macOS sees every update as a new app, so after updating, switch Slovo off and on again in those two lists.
+
 ## Build and run
 
 ```bash
@@ -84,6 +96,8 @@ make run
 `scripts/build-app.sh` builds the SwiftPM target, compiles the Icon Composer icon with `actool`, wraps everything into `build/Slovo.app` and signs it with the first Apple Development certificate it finds (set `CODESIGN_IDENTITY` to pick another). A stable signature matters: with ad-hoc signing macOS forgets the Accessibility permission after every rebuild.
 
 On first launch, allow Slovo in **System Settings → Privacy & Security → Accessibility**.
+
+`make release` builds a universal (Apple silicon and Intel) app signed ad-hoc and packs it into `build/Slovo-<version>.dmg`; the version comes from `Resources/Info.plist`.
 
 To open the popup without a shortcut, for example while working on the UI:
 
@@ -111,3 +125,6 @@ open build/Slovo.app --args --demo "Some text to translate"
 | `DictionaryLookup`, `Speaker` | Dictionary.app entries and `AVSpeechSynthesizer` |
 | `AITranslator`, `ClaudeTranslator`, `OpenAICompatibleTranslator` | One prompt for every provider; Claude's Messages API with server-side fallback on refusals, or streamed chat completions plus the server's model list |
 
+## License
+
+MIT, see [LICENSE](LICENSE).

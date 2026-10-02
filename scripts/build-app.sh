@@ -6,8 +6,13 @@ cd "$(dirname "$0")/.."
 CONFIG="${CONFIG:-release}"
 APP="build/Slovo.app"
 
-swift build -c "$CONFIG"
-BIN_DIR="$(swift build -c "$CONFIG" --show-bin-path)"
+# UNIVERSAL=1 builds for both Apple silicon and Intel, as releases need.
+ARCH_FLAGS=()
+if [ "${UNIVERSAL:-0}" = "1" ]; then
+  ARCH_FLAGS=(--arch arm64 --arch x86_64)
+fi
+swift build -c "$CONFIG" ${ARCH_FLAGS[@]+"${ARCH_FLAGS[@]}"}
+BIN_DIR="$(swift build -c "$CONFIG" ${ARCH_FLAGS[@]+"${ARCH_FLAGS[@]}"} --show-bin-path)"
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
