@@ -13,7 +13,7 @@
   <img src="docs/images/hero.png" alt="Slovo translating a selected German sentence into English, in a popup under the selection">
 </p>
 
-Translation runs on your Mac with Apple Translation: no account, no network, nothing leaves the device unless you ask an AI model to polish a translation.
+Translation runs on your Mac with Apple Translation: no account, no network, and your text never leaves the device unless you ask an AI model to polish a translation.
 
 ## Features
 
@@ -37,15 +37,23 @@ Translation runs on your Mac with Apple Translation: no account, no network, not
 </p>
 
 <p align="center">
+  <img src="docs/images/overlay.png" alt="A Japanese sale poster, and the same poster with each line's English translation drawn over the original in its colors">
+</p>
+
+<p align="center">
+  <img src="docs/images/writing.png" alt="A German chat with the writing popup open above the message field: English typed in, the German translation below it, ready to insert">
+</p>
+
+<p align="center">
   <img src="docs/images/dark.png" alt="Slovo in dark mode translating a French sentence, improved by Claude">
 </p>
 
 ## Menu bar and settings
 
-Slovo has no Dock icon. Everything else lives behind its menu bar icon: screen translation in a popup or over the screen, writing with translation, the per-app switch for the app you were just in, history and settings.
+Slovo has no Dock icon. Everything else lives behind its menu bar icon: screen translation in a popup or over the screen, writing with translation, the per-app switch for the app you were just in, history, update checks and settings.
 
 <p align="center">
-  <img src="docs/images/menu.png" width="645" alt="The menu bar menu with the translation history submenu open">
+  <img src="docs/images/menu.png" width="645" alt="The menu bar menu with its shortcuts and the translation history submenu open">
 </p>
 
 Settings are split into four tabs:
@@ -58,7 +66,7 @@ Settings are split into four tabs:
 | AI | The provider: Claude (API key and a model from your account's list) or an OpenAI-compatible API (address, optional key, and a model picked from the server's list or typed in). Keys are kept in the Keychain |
 
 <p align="center">
-  <img src="docs/images/settings.png" width="570" alt="The General tab of Slovo's settings with the two shortcuts and Open at Login">
+  <img src="docs/images/settings.png" width="570" alt="The General tab of Slovo's settings with four shortcuts, Open at Login and automatic update checks">
 </p>
 
 ## Keyboard
@@ -81,8 +89,8 @@ Settings are split into four tabs:
 
 - macOS 26 or later (Apple Translation, Liquid Glass, Vision document recognition)
 - Xcode 26 to build
-- Accessibility permission, for the selection shortcut and Replace
-- Screen Recording permission, only for ⇧⌘2; macOS asks the first time
+- Accessibility permission, for the selection shortcut, Replace and Insert
+- Screen Recording permission, only for ⇧⌘2 and ⌥⇧⌘2; macOS asks the first time
 
 ## Install
 
@@ -94,7 +102,7 @@ Slovo isn't signed with an Apple Developer ID yet, so the first launch is blocke
 xattr -dr com.apple.quarantine /Applications/Slovo.app
 ```
 
-Then allow Slovo in **Privacy & Security → Accessibility**, and later in **Screen Recording** when you first press ⇧⌘2. Without a Developer ID signature macOS sees every update as a new app, so after updating, switch Slovo off and on again in those two lists.
+Then allow Slovo in **Privacy & Security → Accessibility**, and later in **Screen Recording** when you first press ⇧⌘2 or ⌥⇧⌘2. Without a Developer ID signature macOS sees every update as a new app, so after updating, switch Slovo off and on again in those two lists.
 
 Slovo updates itself with [Sparkle](https://sparkle-project.org): it checks the latest GitHub release once a day (or from **Check for Updates…** in the menu), and installs a new version only if its signature matches the key built into the app.
 
@@ -116,11 +124,14 @@ To open the popup without a shortcut, for example while working on the UI:
 open build/Slovo.app --args --demo "Some text to translate"
 ```
 
+`--compose` instead of `--demo` opens the writing popup.
+
 ## Privacy
 
 - Translation, language detection, text recognition, the dictionary and speech all run on the device.
 - Text leaves the Mac only when you press the AI button, and goes only to the provider you configured. With a local Ollama or LM Studio it never leaves the Mac at all.
 - History and settings stay in Slovo's preferences on this Mac; Clear History in the menu wipes the history.
+- Update checks download the update feed from GitHub once a day; no text or usage data goes with them. They can be turned off in Settings → General.
 
 ## How it works
 
@@ -136,6 +147,7 @@ open build/Slovo.app --args --demo "Some text to translate"
 | `RegionPicker`, `ScreenOverlay` | A crosshair that reports the picked rectangle, a ScreenCaptureKit shot of it, Vision paragraphs with their bounds, and colors sampled around and inside each one for the patches drawn over the screen |
 | `ScreenTextCapture` | `screencapture -i` for the region, then Vision's `RecognizeDocumentsRequest` |
 | `DictionaryLookup`, `Speaker` | Dictionary.app entries and `AVSpeechSynthesizer` |
+| `Updater` | Sparkle's standard updater: the appcast of the latest GitHub release, EdDSA-signed downloads |
 | `AITranslator`, `ClaudeTranslator`, `OpenAICompatibleTranslator` | One prompt for every provider; Claude's Messages API with server-side fallback on refusals, or streamed chat completions plus the server's model list |
 
 ## License
