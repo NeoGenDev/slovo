@@ -118,6 +118,8 @@ nonisolated enum L10n {
 
     // Popup
     static let close = pick("Закрыть", "Close")
+    static let pinLive = pick("Закрепить и обновлять по ходу (⌘P)", "Pin and Keep Updating (⌘P)")
+    static let unpinLive = pick("Открепить (⌘P)", "Unpin (⌘P)")
     static let showOriginal = pick("Показать оригинал", "Show Original")
     static let showTranslation = pick("Показать перевод", "Show Translation")
     static let pin = pick("Закрепить (⌘P)", "Pin (⌘P)")

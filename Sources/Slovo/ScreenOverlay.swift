@@ -37,13 +37,55 @@ nonisolated struct RGBColor: Sendable {
     }
 }
 
-/// Screenshot of an area and the paragraphs in it.
-enum ScreenScanner {
-    /// `area` is in AppKit screen coordinates; ScreenCaptureKit wants display space (top-left origin).
-    static func capture(_ area: CGRect) async -> CGImage? {
+/// A screen area to capture again and again, without Slovo's own windows in the picture: the
+/// overlay sits right on top of the area and would otherwise read its own translation back.
+final class ScreenAreaCapture {
+    private let filter: SCContentFilter
+    private let configuration: SCStreamConfiguration
+
+    private init(filter: SCContentFilter, configuration: SCStreamConfiguration) {
+        self.filter = filter
+        self.configuration = configuration
+    }
+
+    /// `area` is in AppKit screen coordinates. An area across two displays is cut to the one with its center.
+    static func make(for area: CGRect) async -> ScreenAreaCapture? {
+        guard let content = try? await SCShareableContent.current else { return nil }
+        // ScreenCaptureKit works in display space: points, top-left origin at the primary display.
         let primaryHeight = NSScreen.screens.first?.frame.maxY ?? 0
         let displayRect = CGRect(x: area.minX, y: primaryHeight - area.maxY, width: area.width, height: area.height)
-        return try? await SCScreenshotManager.captureImage(in: displayRect)
+        let center = CGPoint(x: displayRect.midX, y: displayRect.midY)
+        guard let display = content.displays.first(where: { $0.frame.contains(center) }) ?? content.displays.first else {
+            return nil
+        }
+        let ownApp = content.applications.filter { $0.processID == ProcessInfo.processInfo.processIdentifier }
+        let filter = SCContentFilter(display: display, excludingApplications: ownApp, exceptingWindows: [])
+        let configuration = SCStreamConfiguration()
+        configuration.sourceRect = displayRect.offsetBy(dx: -display.frame.minX, dy: -display.frame.minY)
+        let scale = CGFloat(filter.pointPixelScale)
+        configuration.width = Int((area.width * scale).rounded())
+        configuration.height = Int((area.height * scale).rounded())
+        configuration.showsCursor = false
+        return ScreenAreaCapture(filter: filter, configuration: configuration)
+    }
+
+    func image() async -> CGImage? {
+        try? await SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration)
+    }
+}
+
+/// The paragraphs in a screenshot.
+enum ScreenScanner {
+    /// Cheap check whether the area changed since the last look, so an unchanged picture isn't read again.
+    nonisolated static func fingerprint(of image: CGImage) -> Int {
+        guard let data = image.dataProvider?.data, let bytes = CFDataGetBytePtr(data) else { return 0 }
+        let length = CFDataGetLength(data)
+        var hasher = Hasher()
+        hasher.combine(length)
+        for index in stride(from: 0, to: length, by: max(length / 65_536, 1)) {
+            hasher.combine(bytes[index])
+        }
+        return hasher.finalize()
     }
 
     /// Paragraphs as the document recognizer rebuilds them from wrapped lines, each with the
@@ -148,53 +190,74 @@ private nonisolated struct PixelBuffer {
     }
 }
 
+
 @Observable
 final class ScreenOverlayModel {
     struct Block: Identifiable {
-        let id: Int
+        /// The text plus its occurrence, so a paragraph that stays put keeps its patch between looks.
+        let id: String
         let source: ScreenBlock
         /// Already in the target language, or no words at all: left as it is on the screen.
-        var isKept = false
+        let isKept: Bool
         var translation: String?
     }
 
     private(set) var blocks: [Block] = []
     private(set) var pair: LanguagePair?
+    /// The first translation of the area; later looks of a pinned overlay update quietly.
     private(set) var isTranslating = false
+    /// Pinned: the overlay stays and follows the area as it changes, like live subtitles.
+    var isPinned = false
     var showsOriginal = false
     var justCopied = false
-    /// Where the area and the toolbar sit in the panel, top-left origin.
-    private(set) var areaFrame = CGRect.zero
-    private(set) var toolbarOrigin = CGPoint.zero
-    /// Bumped for every capture, so views start fresh.
+    /// Bumped for every new area, so views start fresh.
     private(set) var session = 0
 
     @ObservationIgnored var onCopy: () -> Void = {}
     @ObservationIgnored var onClose: () -> Void = {}
+    @ObservationIgnored var onPinChange: () -> Void = {}
 
-    func start(blocks: [ScreenBlock], pair: LanguagePair, areaFrame: CGRect, toolbarOrigin: CGPoint) {
+    func start(pair: LanguagePair) {
         session += 1
         self.pair = pair
-        self.areaFrame = areaFrame
-        self.toolbarOrigin = toolbarOrigin
+        blocks = []
+        isPinned = false
         showsOriginal = false
         justCopied = false
         isTranslating = true
-        let catalog = LanguageCatalog.shared
-        self.blocks = blocks.enumerated().map { index, block in
-            let detected = LanguageDetector.detect(block.text, candidates: catalog.keys, preferred: [pair.source, pair.target])
-            let isKept = !block.text.contains(where: \.isLetter) || detected == pair.target
-            return Block(id: index, source: block, isKept: isKept)
-        }
     }
 
-    func setTranslation(_ text: String, ofBlock id: Int) {
-        guard blocks.indices.contains(id) else { return }
-        withAnimation(.easeOut(duration: 0.2)) { blocks[id].translation = text }
+    /// The paragraphs of a new look at the area. Ones translated before get their translation
+    /// right away; the rest wait for theirs, with the original showing through meanwhile.
+    func update(with found: [ScreenBlock], cachedTranslation: (String) -> String?) {
+        guard let pair else { return }
+        let catalog = LanguageCatalog.shared
+        var occurrences: [String: Int] = [:]
+        let updated = found.map { block in
+            let occurrence = occurrences[block.text, default: 0]
+            occurrences[block.text] = occurrence + 1
+            let detected = LanguageDetector.detect(block.text, candidates: catalog.keys, preferred: [pair.source, pair.target])
+            let isKept = !block.text.contains(where: \.isLetter) || detected == pair.target
+            return Block(
+                id: "\(occurrence)#\(block.text)", source: block, isKept: isKept,
+                translation: isKept ? nil : cachedTranslation(block.text)
+            )
+        }
+        withAnimation(.easeOut(duration: 0.2)) { blocks = updated }
+    }
+
+    func setTranslation(_ text: String, ofBlock id: String) {
+        guard let index = blocks.firstIndex(where: { $0.id == id }) else { return }
+        withAnimation(.easeOut(duration: 0.2)) { blocks[index].translation = text }
     }
 
     func finishTranslating() {
+        guard isTranslating else { return }
         withAnimation { isTranslating = false }
+    }
+
+    var pending: [Block] {
+        blocks.filter { !$0.isKept && $0.translation == nil }
     }
 
     /// The whole translation in reading order; kept paragraphs as they are.
@@ -203,16 +266,26 @@ final class ScreenOverlayModel {
     }
 }
 
-/// Translates the paragraphs in a screen area and draws each translation over its original,
-/// in the original's colors, with a small toolbar next to the area.
-final class ScreenOverlayController: NSObject, NSWindowDelegate {
+/// Translates the paragraphs in a screen area and draws each translation over its original, in the
+/// original's colors. The patches live in a window that lets clicks through to the app underneath;
+/// the toolbar next to the area is a window of its own.
+final class ScreenOverlayController: NSObject {
     private static let toolbarHeight: CGFloat = 40
-    private static let toolbarWidth: CGFloat = 320
+    private static let toolbarWidth: CGFloat = 360
     private static let gap: CGFloat = 8
+    private static let cacheLimit = 500
 
     private let model = ScreenOverlayModel()
-    private var loadedPanel: PopupPanel?
+    private var patchesPanel: PopupPanel?
+    private var toolbarPanel: PopupPanel?
+    private var capture: ScreenAreaCapture?
+    /// The SDK isn't Sendable-annotated; the session is only used from the main actor and to cancel it.
+    nonisolated(unsafe) private var session: TranslationSession?
     private var task: Task<Void, Never>?
+    private var liveTask: Task<Void, Never>?
+    /// Translations made for this area, so text that comes back (a repeated subtitle) isn't translated again.
+    private var cache: [String: String] = [:]
+    private var lastFingerprint: Int?
     private var monitors: [Any] = []
     private var activationObserver: NSObjectProtocol?
 
@@ -226,16 +299,13 @@ final class ScreenOverlayController: NSObject, NSWindowDelegate {
         super.init()
         model.onClose = { [weak self] in self?.close() }
         model.onCopy = { [weak self] in self?.copy() }
+        model.onPinChange = { [weak self] in self?.pinChanged() }
     }
-
-    var isShown: Bool { loadedPanel?.isVisible == true }
 
     /// `area` in AppKit screen coordinates.
     func show(area: CGRect) async {
         close(notify: false)
-        // Let the region picker leave the screen before the screenshot.
-        try? await Task.sleep(for: .milliseconds(80))
-        guard let image = await ScreenScanner.capture(area) else {
+        guard let capture = await ScreenAreaCapture.make(for: area), let image = await capture.image() else {
             onNoText()
             return
         }
@@ -261,13 +331,19 @@ final class ScreenOverlayController: NSObject, NSWindowDelegate {
             return
         }
 
-        let layout = Self.layout(for: area)
-        model.start(blocks: blocks, pair: pair, areaFrame: layout.area, toolbarOrigin: layout.toolbar)
-        present(frame: layout.panel)
+        self.capture = capture
+        session = TranslationSession(installedSource: sourceVariant, target: targetVariant)
+        cache = [:]
+        lastFingerprint = ScreenScanner.fingerprint(of: image)
+        model.start(pair: pair)
+        model.update(with: blocks) { _ in nil }
+        present(area: area)
         settings.remember(pair)
 
-        let session = TranslationSession(installedSource: sourceVariant, target: targetVariant)
-        task = Task { await translate(with: session) }
+        task = Task {
+            await translatePending()
+            model.finishTranslating()
+        }
     }
 
     func close() {
@@ -277,81 +353,136 @@ final class ScreenOverlayController: NSObject, NSWindowDelegate {
     private func close(notify: Bool) {
         task?.cancel()
         task = nil
-        for monitor in monitors { NSEvent.removeMonitor(monitor) }
-        monitors = []
-        if let activationObserver { NSWorkspace.shared.notificationCenter.removeObserver(activationObserver) }
-        activationObserver = nil
-        guard let panel = loadedPanel, panel.isVisible else { return }
-        panel.orderOut(nil)
-        if notify { onClosed() }
+        liveTask?.cancel()
+        liveTask = nil
+        session?.cancel()
+        session = nil
+        capture = nil
+        stopDismissalMonitors()
+        let wasShown = toolbarPanel?.isVisible == true
+        patchesPanel?.orderOut(nil)
+        toolbarPanel?.orderOut(nil)
+        if notify && wasShown { onClosed() }
     }
 
     private func copy() {
         Pasteboard.setString(model.fullTranslation)
         withAnimation(.smooth(duration: 0.2)) { model.justCopied = true }
+        let isPinned = model.isPinned
         Task {
-            try? await Task.sleep(for: .milliseconds(700))
-            close()
+            try? await Task.sleep(for: .milliseconds(isPinned ? 1200 : 700))
+            if isPinned {
+                withAnimation(.smooth(duration: 0.2)) { model.justCopied = false }
+            } else {
+                close()
+            }
         }
     }
 
-    private func translate(with session: TranslationSession) async {
-        // The SDK isn't Sendable-annotated; the session is only used from here and to cancel it.
-        nonisolated(unsafe) let session = session
-        let requests = model.blocks.filter { !$0.isKept }.map {
-            TranslationSession.Request(sourceText: $0.source.text, clientIdentifier: String($0.id))
-        }
-        await withTaskCancellationHandler {
-            do {
-                for try await response in session.translate(batch: requests) {
-                    guard !Task.isCancelled else { return }
-                    if let id = response.clientIdentifier.flatMap(Int.init) {
-                        model.setTranslation(response.targetText, ofBlock: id)
-                    }
-                }
-            } catch {
+    // MARK: Translation
+
+    /// Translates the paragraphs that have no translation yet in one batch, each shown as it arrives.
+    private func translatePending() async {
+        guard let session else { return }
+        nonisolated(unsafe) let translator = session
+        let pending = model.pending
+        guard !pending.isEmpty else { return }
+        let requests = pending.map { TranslationSession.Request(sourceText: $0.source.text, clientIdentifier: $0.id) }
+        do {
+            for try await response in translator.translate(batch: requests) {
                 guard !Task.isCancelled else { return }
+                if let id = response.clientIdentifier { deliver(response.targetText, for: response.sourceText, blockID: id) }
             }
-            // A batch stops at the first paragraph it can't translate; the rest go one by one.
-            for block in model.blocks where !block.isKept && block.translation == nil {
-                guard let text = (try? await session.translate(block.source.text))?.targetText else { continue }
-                guard !Task.isCancelled else { return }
-                model.setTranslation(text, ofBlock: block.id)
-            }
-        } onCancel: {
-            session.cancel()
+        } catch {
+            guard !Task.isCancelled else { return }
         }
-        guard !Task.isCancelled else { return }
-        model.finishTranslating()
+        // A batch stops at the first paragraph it can't translate; the rest go one by one.
+        for block in model.pending {
+            guard let text = (try? await translator.translate(block.source.text))?.targetText else { continue }
+            guard !Task.isCancelled else { return }
+            deliver(text, for: block.source.text, blockID: block.id)
+        }
     }
 
-    /// The panel covers the area plus the toolbar: below the area when there's room, above it
-    /// otherwise, or inside its bottom edge on a full-screen area.
-    private static func layout(for area: CGRect) -> (panel: CGRect, area: CGRect, toolbar: CGPoint) {
+    private func deliver(_ translation: String, for source: String, blockID: String) {
+        if cache.count >= Self.cacheLimit { cache = [:] }
+        cache[source] = translation
+        model.setTranslation(translation, ofBlock: blockID)
+    }
+
+    // MARK: Live updates
+
+    private func pinChanged() {
+        if model.isPinned {
+            stopDismissalMonitors()
+            startLiveUpdates()
+        } else {
+            liveTask?.cancel()
+            liveTask = nil
+            startDismissalMonitors()
+        }
+    }
+
+    /// How often a pinned overlay looks at the area again: a strip of subtitles is read in a blink
+    /// and changes often, a whole window takes longer to read and changes less. Looks at an unchanged
+    /// picture stop at the fingerprint, so a short pause costs little.
+    private static func liveInterval(for size: CGSize) -> Duration {
+        let seconds = min(max(0.15 + size.width * size.height / 1_600_000, 0.15), 1)
+        return .milliseconds(Int(seconds * 1000))
+    }
+
+    /// Looks at the area again and again; when the picture changed, reads it and translates what's new.
+    private func startLiveUpdates() {
+        liveTask?.cancel()
+        let interval = Self.liveInterval(for: patchesPanel?.frame.size ?? .zero)
+        liveTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: interval)
+                guard !Task.isCancelled, let self, let capture = self.capture,
+                      let image = await capture.image() else { continue }
+                let fingerprint = ScreenScanner.fingerprint(of: image)
+                guard fingerprint != self.lastFingerprint else { continue }
+                self.lastFingerprint = fingerprint
+                let size = self.patchesPanel?.frame.size ?? .zero
+                let blocks = await ScreenScanner.blocks(in: image, pointSize: size)
+                guard !Task.isCancelled else { return }
+                self.model.update(with: blocks) { self.cache[$0] }
+                await self.translatePending()
+            }
+        }
+    }
+
+    // MARK: Windows
+
+    private func present(area: CGRect) {
+        let patches = patchesPanel ?? makePanel(PatchesView(model: model), acceptsClicks: false)
+        let toolbar = toolbarPanel ?? makePanel(OverlayToolbar(model: model), acceptsClicks: true)
+        patchesPanel = patches
+        toolbarPanel = toolbar
+        patches.setFrame(area, display: true)
+        toolbar.setFrame(Self.toolbarFrame(for: area), display: true)
+        patches.orderFrontRegardless()
+        toolbar.makeKeyAndOrderFront(nil)
+        startDismissalMonitors()
+    }
+
+    /// Below the area when there's room, above it otherwise, or inside its bottom edge on a full-screen area.
+    private static func toolbarFrame(for area: CGRect) -> CGRect {
         let screen = NSScreen.screens.first { $0.frame.intersects(area) } ?? NSScreen.main
         let visible = screen?.visibleFrame ?? area
-        let toolbarX = min(max(area.minX, visible.minX + gap), visible.maxX - toolbarWidth - gap)
-        var toolbar = CGRect(x: toolbarX, y: area.minY - gap - toolbarHeight, width: toolbarWidth, height: toolbarHeight)
-        if toolbar.minY < visible.minY {
-            toolbar.origin.y = area.maxY + gap
-            if toolbar.maxY > visible.maxY { toolbar.origin.y = area.minY + gap }
+        let x = min(max(area.minX, visible.minX + gap), visible.maxX - toolbarWidth - gap)
+        var frame = CGRect(x: x, y: area.minY - gap - toolbarHeight, width: toolbarWidth, height: toolbarHeight)
+        if frame.minY < visible.minY {
+            frame.origin.y = area.maxY + gap
+            if frame.maxY > visible.maxY { frame.origin.y = area.minY + gap }
         }
-        let panel = area.union(toolbar)
-        // Top-left coordinates inside the panel.
-        let local = { (rect: CGRect) in
-            CGRect(x: rect.minX - panel.minX, y: panel.maxY - rect.maxY, width: rect.width, height: rect.height)
-        }
-        return (panel, local(area), local(toolbar).origin)
+        return frame
     }
 
-    private func present(frame: CGRect) {
-        let panel = loadedPanel ?? makePanel()
-        loadedPanel = panel
-        panel.setFrame(frame, display: true)
-        panel.makeKeyAndOrderFront(nil)
-
-        // The picture is a still of what was on screen: any click elsewhere, scrolling or switching
-        // apps would leave it over content that has moved, so those close it.
+    /// Unpinned, the overlay is a still of what was on screen: a click elsewhere, scrolling or
+    /// switching apps would leave it over content that has moved, so those close it.
+    private func startDismissalMonitors() {
+        guard monitors.isEmpty else { return }
         let events: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel]
         if let monitor = NSEvent.addGlobalMonitorForEvents(matching: events, handler: { [weak self] _ in self?.close() }) {
             monitors.append(monitor)
@@ -363,42 +494,47 @@ final class ScreenOverlayController: NSObject, NSWindowDelegate {
         }
     }
 
-    private func makePanel() -> PopupPanel {
+    private func stopDismissalMonitors() {
+        for monitor in monitors { NSEvent.removeMonitor(monitor) }
+        monitors = []
+        if let activationObserver { NSWorkspace.shared.notificationCenter.removeObserver(activationObserver) }
+        activationObserver = nil
+    }
+
+    private func makePanel(_ view: some View, acceptsClicks: Bool) -> PopupPanel {
         let panel = PopupPanel()
-        panel.delegate = self
         panel.onCancel = { [weak self] in self?.close() }
-        let hosting = NSHostingView(rootView: ScreenOverlayView(model: model))
+        // The patches only show; clicks on them reach the app underneath, e.g. a video's controls.
+        panel.ignoresMouseEvents = !acceptsClicks
+        let hosting = NSHostingView(rootView: view)
         hosting.sizingOptions = []
         panel.contentView = hosting
         return panel
     }
 }
 
-struct ScreenOverlayView: View {
-    @Bindable var model: ScreenOverlayModel
+private struct PatchesView: View {
+    let model: ScreenOverlayModel
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            ZStack(alignment: .topLeading) {
-                ForEach(model.blocks) { block in
-                    if let translation = block.translation, !block.isKept {
-                        BlockPatch(block: block.source, text: translation)
-                            .transition(.opacity)
-                    }
+            ForEach(model.blocks) { block in
+                if let translation = block.translation, !block.isKept {
+                    BlockPatch(block: block.source, text: translation)
+                        .transition(.opacity)
                 }
             }
-            .frame(width: model.areaFrame.width, height: model.areaFrame.height, alignment: .topLeading)
-            .offset(x: model.areaFrame.minX, y: model.areaFrame.minY)
-            .opacity(model.showsOriginal ? 0 : 1)
-
-            toolbar
-                .offset(x: model.toolbarOrigin.x, y: model.toolbarOrigin.y)
         }
-        .id(model.session)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .opacity(model.showsOriginal ? 0 : 1)
+        .id(model.session)
     }
+}
 
-    private var toolbar: some View {
+private struct OverlayToolbar: View {
+    @Bindable var model: ScreenOverlayModel
+
+    var body: some View {
         HStack(spacing: 4) {
             if let pair = model.pair {
                 let catalog = LanguageCatalog.shared
@@ -417,6 +553,12 @@ struct ScreenOverlayView: View {
                     .controlSize(.small)
                     .accessibilityLabel(L10n.translating)
             }
+            ToolbarIcon(name: model.isPinned ? "pin.fill" : "pin", label: model.isPinned ? L10n.unpinLive : L10n.pinLive) {
+                withAnimation(.smooth(duration: 0.2)) { model.isPinned.toggle() }
+                model.onPinChange()
+            }
+            .foregroundStyle(model.isPinned ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
+            .keyboardShortcut("p", modifiers: .command)
             ToolbarIcon(name: model.showsOriginal ? "eye.slash" : "eye", label: model.showsOriginal ? L10n.showTranslation : L10n.showOriginal) {
                 withAnimation(.easeInOut(duration: 0.15)) { model.showsOriginal.toggle() }
             }
@@ -430,6 +572,8 @@ struct ScreenOverlayView: View {
         .frame(height: 40)
         .glassEffect(.regular, in: .capsule)
         .fixedSize()
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .id(model.session)
     }
 }
 
@@ -447,7 +591,8 @@ private struct ToolbarIcon: View {
                 .contentShape(.circle)
         }
         .buttonStyle(.borderless)
-        .focusEffectDisabled()
+        // Borderless buttons draw AppKit's focus ring; the shortcuts work without focus anyway.
+        .focusable(false)
         .help(label)
         .accessibilityLabel(label)
     }
