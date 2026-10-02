@@ -40,6 +40,8 @@ final class PopupController: NSObject, NSWindowDelegate {
         case top(CGFloat)
         /// Bottom edge pinned; the popup grows upward.
         case bottom(CGFloat)
+        /// Vertical center pinned; the popup grows both ways.
+        case middle(CGFloat)
     }
 
     private static let estimatedHeight: CGFloat = 240
@@ -52,7 +54,15 @@ final class PopupController: NSObject, NSWindowDelegate {
     private static let revealSlide: CGFloat = 6
 
     private let model = PopupModel()
-    private lazy var panel = makePanel()
+    /// Created on first show. `close()` must not create it: a panel built and laid out before it
+    /// has a real frame got its glass content stuck off-center.
+    private var loadedPanel: PopupPanel?
+    private var panel: PopupPanel {
+        if let loadedPanel { return loadedPanel }
+        let panel = makePanel()
+        loadedPanel = panel
+        return panel
+    }
     private var context = SelectionContext(app: nil, isEditable: true, selectionRect: nil)
     private var whitespace = (leading: "", trailing: "")
     private var anchor = Anchor.top(0)
@@ -75,6 +85,30 @@ final class PopupController: NSObject, NSWindowDelegate {
     /// Orders the panel in fully transparent and reveals it once the translation is ready,
     /// or after `skeletonDelay` if it isn't — so the first visible frame already has its final size.
     func show(text: String, context: SelectionContext) {
+        prepareForNewPopup()
+        self.context = context
+        whitespace = (
+            String(text.prefix(while: \.isWhitespace)),
+            String(text.reversed().prefix(while: \.isWhitespace).reversed())
+        )
+        model.start(
+            text: text.trimmingCharacters(in: .whitespacesAndNewlines),
+            isEditable: context.isEditable,
+            source: context.source
+        )
+        present(for: context)
+    }
+
+    /// A message-only popup, e.g. "no text found" after a screen capture.
+    func showFailure(_ message: String) {
+        prepareForNewPopup()
+        context = SelectionContext(app: nil, isEditable: false, selectionRect: nil, source: .screen)
+        whitespace = ("", "")
+        model.showFailure(message)
+        present(for: context)
+    }
+
+    private func prepareForNewPopup() {
         closeTask?.cancel()
         revealTask?.cancel()
         Speaker.shared.stop()
@@ -82,15 +116,13 @@ final class PopupController: NSObject, NSWindowDelegate {
         if panel.isVisible { panel.orderOut(nil) }
         // Stays false while the panel is on screen but transparent, laying out its first content.
         model.isRevealed = false
+    }
 
-        self.context = context
-        whitespace = (
-            String(text.prefix(while: \.isWhitespace)),
-            String(text.reversed().prefix(while: \.isWhitespace).reversed())
-        )
-        model.start(text: text.trimmingCharacters(in: .whitespacesAndNewlines), isEditable: context.isEditable)
-
-        position(near: context.selectionRect)
+    private func present(for context: SelectionContext) {
+        switch context.source {
+        case .selection: position(near: context.selectionRect)
+        case .screen: positionInMiddleOfScreen()
+        }
         panel.alphaValue = 0
         panel.orderFrontRegardless()
         startMouseMonitor()
@@ -103,7 +135,7 @@ final class PopupController: NSObject, NSWindowDelegate {
         model.cancel()
         Speaker.shared.stop()
         stopMouseMonitor()
-        guard panel.isVisible else { return }
+        guard let panel = loadedPanel, panel.isVisible else { return }
 
         guard animated else {
             panel.orderOut(nil)
@@ -170,6 +202,17 @@ final class PopupController: NSObject, NSWindowDelegate {
         applyFrame()
     }
 
+    /// Text from the screen has no selection to sit next to, and the pointer is wherever the drag
+    /// ended, so the popup opens mid-screen, a little above center, like the Settings window.
+    private func positionInMiddleOfScreen() {
+        let mouse = NSEvent.mouseLocation
+        let screen = NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main
+        guard let visible = screen?.visibleFrame else { return }
+        anchor = .middle(visible.minY + visible.height * 0.55)
+        originX = visible.midX - PopupMetrics.width / 2
+        applyFrame()
+    }
+
     private func resize(to newHeight: CGFloat) {
         let rounded = ceil(newHeight)
         guard rounded > 0, rounded != height else { return }
@@ -183,6 +226,7 @@ final class PopupController: NSObject, NSWindowDelegate {
         switch anchor {
         case .top(let top): y = top - height
         case .bottom(let bottom): y = bottom
+        case .middle(let middle): y = middle - height / 2
         }
         let card = NSRect(x: originX, y: y, width: PopupMetrics.width, height: height)
         let margin = PopupMetrics.shadowMargin
@@ -232,7 +276,7 @@ final class PopupController: NSObject, NSWindowDelegate {
         let frame = targetFrame()
         let slide: CGFloat
         switch anchor {
-        case .top: slide = Self.revealSlide
+        case .top, .middle: slide = Self.revealSlide
         case .bottom: slide = -Self.revealSlide
         }
         panel.setFrame(frame.offsetBy(dx: 0, dy: slide), display: false)
@@ -283,6 +327,8 @@ final class PopupController: NSObject, NSWindowDelegate {
         glass.cornerRadius = PopupMetrics.cornerRadius
         glass.contentView = hosting
         panel.contentView = PopupContainerView(content: glass)
+        // Start from a real size so the first layout pass never sees an empty frame.
+        panel.setFrame(NSRect(origin: .zero, size: targetFrame().size), display: false)
         return panel
     }
 }
@@ -292,34 +338,38 @@ final class PopupController: NSObject, NSWindowDelegate {
 private final class PopupContainerView: NSView {
     private let shadowView = ShadowView()
     private let card = NSView()
+    private let content: NSView
 
     init(content: NSView) {
+        self.content = content
         super.init(frame: .zero)
         wantsLayer = true
 
-        shadowView.autoresizingMask = [.width, .height]
         addSubview(shadowView)
 
         card.wantsLayer = true
         card.layer?.cornerRadius = PopupMetrics.cornerRadius
         card.layer?.cornerCurve = .continuous
         card.layer?.masksToBounds = true
-        card.autoresizingMask = [.width, .height]
         addSubview(card)
-
-        content.frame = card.bounds
-        content.autoresizingMask = [.width, .height]
         card.addSubview(content)
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
+    /// Frames are set here rather than by autoresizing: resizing from a degenerate frame (an empty
+    /// rect inset by the margin is a null rect) left the content permanently offset in the card.
     override func layout() {
         super.layout()
-        shadowView.frame = bounds
         let margin = PopupMetrics.shadowMargin
+        guard bounds.width > margin * 2, bounds.height > margin * 2 else { return }
+        shadowView.frame = bounds
         card.frame = bounds.insetBy(dx: margin, dy: margin)
+        content.frame = card.bounds
+        if let glass = content as? NSGlassEffectView, let inner = glass.contentView {
+            inner.frame = glass.bounds
+        }
     }
 }
 

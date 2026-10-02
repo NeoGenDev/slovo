@@ -17,6 +17,7 @@ nonisolated enum L10n {
     // Menu bar
     static let shortcutHint = pick("⌘C C — перевести выделенное", "⌘C C — translate selection")
     static let allowAccessibility = pick("Разрешить Универсальный доступ…", "Allow Accessibility Access…")
+    static let translateScreenArea = pick("Перевести область экрана", "Translate Screen Area")
     static let settings = pick("Настройки…", "Settings…")
     static let history = pick("История переводов", "Translation History")
     static let historyEmpty = pick("Пока пусто", "No translations yet")
@@ -76,6 +77,12 @@ nonisolated enum L10n {
     )
     static let general = pick("Общие", "General")
     static let shortcut = pick("Сочетание клавиш", "Shortcut")
+    static let selectedTextShortcut = pick("Выделенный текст", "Selected text")
+    static let screenAreaShortcut = pick("Область экрана", "Screen area")
+    static let screenAreaFooter = pick(
+        "Для перевода области экрана нужно разрешение на запись экрана: macOS попросит его при первом использовании. Текст распознаётся прямо на Mac.",
+        "Translating a screen area needs the Screen Recording permission: macOS asks for it the first time. Text is recognized right on your Mac."
+    )
     static let openAtLogin = pick("Открывать при входе", "Open at Login")
 
     // Popup
@@ -106,6 +113,7 @@ nonisolated enum L10n {
     static let downloading = pick("Скачивание…", "Downloading…")
 
     // Errors
+    static let noTextFound = pick("В выбранной области не найден текст", "No text found in the selected area")
     static let couldNotDetectLanguage = pick(
         "Не удалось определить язык текста",
         "Couldn't detect the language of the text"

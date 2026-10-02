@@ -1,12 +1,21 @@
 import AppKit
 import ApplicationServices
 
+/// Where the popup's text came from.
+enum TextSource {
+    /// Selected and copied with ⌘C C.
+    case selection
+    /// Recognized in an area of the screen; there is nothing to paste over.
+    case screen
+}
+
 struct SelectionContext {
     var app: NSRunningApplication?
     /// Whether pasting over the selection makes sense. Unknown counts as editable.
     var isEditable: Bool
     /// Selection bounds in AppKit screen coordinates (bottom-left origin), when the app exposes them.
     var selectionRect: CGRect?
+    var source = TextSource.selection
 }
 
 /// Reads the focused element of the frontmost app through the Accessibility API.

@@ -49,7 +49,15 @@ private struct GeneralPane: View {
     var body: some View {
         Form {
             Section {
-                LabeledContent(L10n.shortcut, value: "⌘C C")
+                LabeledContent(L10n.selectedTextShortcut, value: "⌘C C")
+                LabeledContent(L10n.screenAreaShortcut, value: "⇧⌘2")
+            } header: {
+                Text(L10n.shortcut)
+            } footer: {
+                Text(L10n.screenAreaFooter)
+                    .foregroundStyle(.secondary)
+            }
+            Section {
                 Toggle(L10n.openAtLogin, isOn: $controller.launchAtLogin)
             }
         }

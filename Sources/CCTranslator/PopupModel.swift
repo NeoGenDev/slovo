@@ -39,6 +39,7 @@ final class PopupModel {
     private(set) var isRefreshing = false
     private(set) var improvement = Improvement.idle
     private(set) var isEditable = true
+    private(set) var textSource = TextSource.selection
     var justCopied = false
     /// Bumped for every new popup. The view uses it as its identity, so each popup starts from fresh
     /// views instead of transitioning from the previous one's (e.g. the ✓ morphing back into the copy icon).
@@ -59,19 +60,10 @@ final class PopupModel {
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private var improveTask: Task<Void, Never>?
 
-    func start(text: String, isEditable: Bool) {
-        cancel()
-        sourceText = text
-        translation = ""
-        pair = nil
-        isRefreshing = false
-        improvement = .idle
-        justCopied = false
-        downloadConfiguration = nil
-        self.isEditable = isEditable
+    func start(text: String, isEditable: Bool, source: TextSource) {
+        reset(text: text, isEditable: isEditable, source: source)
         dictionaryEntry = DictionaryLookup.entry(for: text)
         phase = .loading
-        session += 1
 
         task = Task {
             await catalog.load()
@@ -85,6 +77,27 @@ final class PopupModel {
             self.pair = pair
             await translate(pair)
         }
+    }
+
+    /// A popup that only carries a message, e.g. when a screen area had no text in it.
+    func showFailure(_ message: String) {
+        reset(text: "", isEditable: false, source: .screen)
+        phase = .failed(message)
+    }
+
+    private func reset(text: String, isEditable: Bool, source: TextSource) {
+        cancel()
+        sourceText = text
+        translation = ""
+        pair = nil
+        dictionaryEntry = nil
+        isRefreshing = false
+        improvement = .idle
+        justCopied = false
+        downloadConfiguration = nil
+        self.isEditable = isEditable
+        textSource = source
+        session += 1
     }
 
     /// Translates the same text again with a language picked in the popup's menu.

@@ -37,6 +37,11 @@ private struct MenuContent: View {
                 Accessibility.openSettings()
             }
         }
+        Button(L10n.translateScreenArea) {
+            controller.translateScreenArea()
+        }
+        // Shown as a hint; the global hot key handles the keystroke itself.
+        .keyboardShortcut("2", modifiers: [.command, .shift])
         if let app = controller.lastActiveApp, let bundleID = app.bundleIdentifier {
             Toggle(
                 L10n.disableIn(app.localizedName ?? AppInfo.name(for: bundleID)),

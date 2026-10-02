@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import Observation
 import ServiceManagement
 
@@ -18,9 +19,15 @@ final class AppController {
     @ObservationIgnored private let popup = PopupController()
     @ObservationIgnored private var trustTimer: Timer?
     @ObservationIgnored private var activationObserver: NSObjectProtocol?
+    @ObservationIgnored private var screenAreaHotKey: GlobalHotKey?
+    @ObservationIgnored private var isCapturingScreen = false
 
     func start() {
         hotkey.onTrigger = { [weak self] in self?.handleDoubleCopy() }
+        // ⇧⌘2, next to the system's ⇧⌘3/4/5 screenshot shortcuts.
+        screenAreaHotKey = GlobalHotKey(keyCode: kVK_ANSI_2, modifiers: cmdKey | shiftKey) { [weak self] in
+            self?.translateScreenArea()
+        }
         trackActiveApp()
 
         // Load the language list up front so the first popup doesn't wait for it.
@@ -56,6 +63,25 @@ final class AppController {
         trustTimer?.invalidate()
         trustTimer = nil
         hotkey.start()
+    }
+
+    /// Lets the user pick an area of the screen, recognizes its text and translates it in the popup.
+    func translateScreenArea() {
+        guard !isCapturingScreen else { return }
+        isCapturingScreen = true
+        // An open popup would otherwise end up in the picture.
+        popup.close(animated: false)
+        Task {
+            defer { isCapturingScreen = false }
+            switch await ScreenTextCapture.run() {
+            case .text(let text):
+                popup.show(text: text, context: SelectionContext(app: nil, isEditable: false, selectionRect: nil, source: .screen))
+            case .noText:
+                popup.showFailure(L10n.noTextFound)
+            case .cancelled, .needsPermission:
+                break
+            }
+        }
     }
 
     private func trackActiveApp() {

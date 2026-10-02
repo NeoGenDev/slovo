@@ -17,17 +17,8 @@ struct PopupView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             header
-            HStack(alignment: .top, spacing: 8) {
-                Text(model.sourceText)
-                    .font(.system(size: 13))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    // Inset like the translation's text; the speak buttons stay flush right, in one column.
-                    .padding(.leading, 2)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                if let pair = model.pair {
-                    SpeakButton(text: model.sourceText, language: pair.source, id: "source", label: L10n.speakOriginal)
-                }
+            if !model.sourceText.isEmpty {
+                sourceRow
             }
             content
             if let entry = model.dictionaryEntry, model.phase == .loading || model.phase == .result {
@@ -43,6 +34,21 @@ struct PopupView: View {
         .frame(maxHeight: .infinity, alignment: .top)
         .translationTask(model.downloadConfiguration) { session in
             await model.download(using: session)
+        }
+    }
+
+    private var sourceRow: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text(model.sourceText)
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                // Inset like the translation's text; the speak buttons stay flush right, in one column.
+                .padding(.leading, 2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let pair = model.pair {
+                SpeakButton(text: model.sourceText, language: pair.source, id: "source", label: L10n.speakOriginal)
+            }
         }
     }
 
@@ -156,7 +162,8 @@ struct PopupView: View {
                 if ClaudeSettings.shared.hasAPIKey {
                     improveButton
                 }
-                if !model.isEditable {
+                // Text from the screen has nothing to paste over, so there's no Replace to explain.
+                if !model.isEditable && model.textSource == .selection {
                     Text(L10n.readOnlyField)
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
