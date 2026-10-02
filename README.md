@@ -13,7 +13,7 @@
   <img src="docs/images/hero.png" alt="Slovo translating a selected German sentence into English, in a popup under the selection">
 </p>
 
-Translation runs on your Mac with Apple Translation: no account, no network, nothing leaves the device unless you ask Claude to polish a translation.
+Translation runs on your Mac with Apple Translation: no account, no network, nothing leaves the device unless you ask an AI model to polish a translation.
 
 ## Features
 
@@ -23,7 +23,7 @@ Translation runs on your Mac with Apple Translation: no account, no network, not
 - **Screen text.** ⇧⌘2 opens the system region picker. Text in the area is recognized on-device with Vision, wrapped lines are rebuilt into paragraphs, and the result opens in the same popup. Works on images, videos and anything you can't select.
 - **Single words.** One word gets a card from Dictionary.app: pronunciation when the dictionary has it, the start of the entry and a link to the full one.
 - **Read aloud.** 🔊 next to the original and the translation reads them with the best installed system voice for each language.
-- **Improve with Claude.** ✦ (⌘I) sends the text and Apple's draft to Claude, which rewrites it to read naturally: idioms, slang, tone. Optional, with your own API key.
+- **Improve with AI.** One button (⌘I) sends the text and Apple's draft to Claude or any OpenAI-compatible API (OpenAI, OpenRouter, a local Ollama or LM Studio), which rewrites it to read naturally: idioms, slang, tone. Optional, with your own key; local servers need none.
 - **History.** The last ten translations are in the menu bar menu: click to copy a translation, ⌥-click to copy the original.
 - **Excluded apps.** Turn ⌘C C off in apps where you copy twice on purpose, such as a terminal or code editor.
 - **Light and dark, English and Russian UI.** The interface follows the system appearance and language.
@@ -51,7 +51,7 @@ Settings are split into four tabs:
 | General | Shortcuts for translating the selection (⌘C C by default) and a screen area (⇧⌘2), Open at Login |
 | Languages | Your language, downloaded languages, downloading new ones |
 | Excluded Apps | Apps where ⌘C C does nothing |
-| Claude | Anthropic API key (kept in the Keychain) and the model: Claude Opus 5.5, Sonnet 5.5 or Haiku 4.5 |
+| AI | The provider: Claude (API key and model: Opus 5.5, Sonnet 5.5 or Haiku 4.5) or an OpenAI-compatible API (address, optional key, and a model picked from the server's list or typed in). Keys are kept in the Keychain |
 
 <p align="center">
   <img src="docs/images/settings.png" width="570" alt="The General tab of Slovo's settings with the two shortcuts and Open at Login">
@@ -65,7 +65,7 @@ Settings are split into four tabs:
 | Anywhere | ⇧⌘2 | Translate a screen area (configurable) |
 | Popup | ↩ | Replace the selection with the translation |
 | Popup | ⌘C | Copy the translation |
-| Popup | ⌘I | Improve with Claude |
+| Popup | ⌘I | Improve with AI |
 | Popup | Esc | Close |
 
 ## Requirements
@@ -94,7 +94,7 @@ open build/Slovo.app --args --demo "Some text to translate"
 ## Privacy
 
 - Translation, language detection, text recognition, the dictionary and speech all run on the device.
-- Text goes to Anthropic only when you press ✦, and only if you saved an API key. Requests are billed to your Anthropic account.
+- Text leaves the Mac only when you press the AI button, and goes only to the provider you configured. With a local Ollama or LM Studio it never leaves the Mac at all.
 - History and settings stay in Slovo's preferences on this Mac; Clear History in the menu wipes the history.
 
 ## How it works
@@ -109,5 +109,5 @@ open build/Slovo.app --args --demo "Some text to translate"
 | `PopupController` | A non-activating `NSPanel` in an `NSGlassEffectView`, so the source app keeps focus and Replace can paste with ⌘V |
 | `ScreenTextCapture` | `screencapture -i` for the region, then Vision's `RecognizeDocumentsRequest` |
 | `DictionaryLookup`, `Speaker` | Dictionary.app entries and `AVSpeechSynthesizer` |
-| `ClaudeTranslator` | Streams a Messages API request over `URLSession`, with server-side fallback on refusals |
+| `AITranslator`, `ClaudeTranslator`, `OpenAICompatibleTranslator` | One prompt for every provider; Claude's Messages API with server-side fallback on refusals, or streamed chat completions plus the server's model list |
 

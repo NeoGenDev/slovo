@@ -67,6 +67,14 @@ nonisolated enum L10n {
     static let remove = pick("Удалить", "Remove")
     static let getAPIKey = pick("Получить ключ в Anthropic Console…", "Get a key in Anthropic Console…")
     static let claudeModel = pick("Модель", "Model")
+    static let aiProvider = pick("Провайдер", "Provider")
+    static let openAICompatible = pick("OpenAI-совместимый API", "OpenAI-compatible API")
+    static let apiAddress = pick("Адрес API", "API address")
+    static let optionalKey = pick("Необязательно", "Optional")
+    static let openAIFooter = pick(
+        "OpenAI, OpenRouter, локальные Ollama (http://localhost:11434/v1) и LM Studio. Локальным серверам ключ не нужен.",
+        "OpenAI, OpenRouter, or a local Ollama (http://localhost:11434/v1) or LM Studio. Local servers need no key."
+    )
     static let claudeOpusTitle = pick("Claude Opus 5.5 — точнее всего", "Claude Opus 5.5 — most accurate")
     static let claudeSonnetTitle = pick("Claude Sonnet 5.5 — быстрее", "Claude Sonnet 5.5 — faster")
     static let claudeHaikuTitle = pick("Claude Haiku 4.5 — самая быстрая", "Claude Haiku 4.5 — fastest")
@@ -110,8 +118,13 @@ nonisolated enum L10n {
 
     // Popup
     static let close = pick("Закрыть", "Close")
-    static let improveWithClaude = pick("Улучшить через Claude (⌘I)", "Improve with Claude (⌘I)")
-    static let improvedByClaude = pick("Улучшено Claude", "Improved by Claude")
+    static func improveWith(_ name: String) -> String {
+        pick("Улучшить через \(name) (⌘I)", "Improve with \(name) (⌘I)")
+    }
+
+    static func improvedBy(_ name: String) -> String {
+        pick("Улучшено: \(name)", "Improved by \(name)")
+    }
     static let speakOriginal = pick("Озвучить оригинал", "Speak Original")
     static let speakTranslation = pick("Озвучить перевод", "Speak Translation")
     static let stopSpeaking = pick("Остановить озвучку", "Stop Speaking")
@@ -150,21 +163,25 @@ nonisolated enum L10n {
         "This translation direction isn't supported"
     )
     static let translationUnavailable = pick("Перевод сейчас недоступен", "Translation is unavailable right now")
-    static let claudeInvalidKey = pick(
-        "Неверный API-ключ Anthropic. Проверьте его в настройках.",
-        "The Anthropic API key is invalid. Check it in Settings."
-    )
-    static let claudeRateLimited = pick("Слишком много запросов к Claude. Попробуйте чуть позже.", "Too many requests to Claude. Try again shortly.")
-    static let claudeOverloaded = pick("Claude сейчас перегружен. Попробуйте ещё раз.", "Claude is overloaded right now. Try again.")
-    static let claudeRefused = pick("Claude отказался обрабатывать этот текст.", "Claude declined to process this text.")
-    static let claudeEmptyResponse = pick("Claude вернул пустой ответ.", "Claude returned an empty response.")
+    static let aiInvalidKey = pick("Неверный API-ключ. Проверьте его в настройках AI.", "The API key is invalid. Check it in AI settings.")
+    static let aiInvalidAddress = pick("Неверный адрес API в настройках AI", "The API address in AI settings is invalid")
+    static let aiRateLimited = pick("Слишком много запросов. Попробуйте чуть позже.", "Too many requests. Try again shortly.")
+    static let aiOverloaded = pick("Сервис сейчас перегружен. Попробуйте ещё раз.", "The service is overloaded right now. Try again.")
+    static let aiRefused = pick("Модель отказалась обрабатывать этот текст.", "The model declined to process this text.")
+    static let aiNoModelList = pick("Сервер не отдал список моделей", "The server didn't return a model list")
+    static let aiNoModels = pick("Сервер не предлагает ни одной модели", "The server offers no models")
 
-    static func claudeNetworkError(_ reason: String) -> String {
-        pick("Не удалось связаться с Claude: \(reason)", "Couldn't reach Claude: \(reason)")
+    static func aiModelsFailed(_ reason: String) -> String {
+        pick("Список моделей не загрузился: \(reason)", "Couldn't load models: \(reason)")
+    }
+    static let aiEmptyResponse = pick("Модель вернула пустой ответ.", "The model returned an empty response.")
+
+    static func aiNetworkError(_ reason: String) -> String {
+        pick("Не удалось связаться с сервисом: \(reason)", "Couldn't reach the service: \(reason)")
     }
 
-    static func claudeError(_ message: String) -> String {
-        pick("Ошибка Claude: \(message)", "Claude error: \(message)")
+    static func aiError(_ message: String) -> String {
+        pick("Ошибка модели: \(message)", "Model error: \(message)")
     }
 
     static func translationFailed(_ reason: String) -> String {

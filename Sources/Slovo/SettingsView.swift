@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 /// Settings window: one tab per area, so the window stays as tall as the open tab needs.
 struct SettingsView: View {
     private enum Tab: String {
-        case general, languages, exclusions, claude
+        case general, languages, exclusions, ai
     }
 
     @Bindable var settings: LanguageSettings
@@ -27,8 +27,8 @@ struct SettingsView: View {
             SwiftUI.Tab(L10n.excludedApps, systemImage: "hand.raised", value: Tab.exclusions) {
                 ExclusionsPane()
             }
-            SwiftUI.Tab("Claude", systemImage: "sparkles", value: Tab.claude) {
-                ClaudePane()
+            SwiftUI.Tab("AI", systemImage: "sparkles", value: Tab.ai) {
+                AIPane()
             }
         }
     }
@@ -435,60 +435,184 @@ private struct ExclusionsPane: View {
     }
 }
 
-private struct ClaudePane: View {
-    @Bindable var claude = ClaudeSettings.shared
-    @State private var apiKeyDraft = ""
+private struct AIPane: View {
+    @Bindable var settings = AISettings.shared
+    @State private var keyDraft = ""
+    /// Models offered by the OpenAI-compatible server, for the model field's list.
+    @State private var models: [String] = []
+    @State private var isLoadingModels = false
+    @State private var modelsError: String?
 
     var body: some View {
         Form {
             Section {
-                apiKeyRow
-                Picker(L10n.claudeModel, selection: $claude.model) {
-                    ForEach(ClaudeModel.allCases) { model in
-                        Text(model.title).tag(model)
+                Picker(L10n.aiProvider, selection: $settings.provider) {
+                    ForEach(AIProvider.allCases) { provider in
+                        Text(provider.title).tag(provider)
                     }
                 }
-            } footer: {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(L10n.claudeFooter)
-                        .foregroundStyle(.secondary)
-                    Button(L10n.getAPIKey) {
-                        if let url = URL(string: "https://console.anthropic.com/settings/keys") {
-                            NSWorkspace.shared.open(url)
-                        }
-                    }
-                    .buttonStyle(.link)
-                }
+            }
+            switch settings.provider {
+            case .claude: claudeSection
+            case .openAICompatible: openAISection
             }
         }
         .settingsPane()
+        // A half-typed key belongs to the provider it was typed for.
+        .onChange(of: settings.provider) { keyDraft = "" }
+    }
+
+    private var claudeSection: some View {
+        Section {
+            keyRow(for: .claude, placeholder: "sk-ant-…")
+            Picker(L10n.claudeModel, selection: $settings.claudeModel) {
+                ForEach(ClaudeModel.allCases) { model in
+                    Text(model.title).tag(model)
+                }
+            }
+        } footer: {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(L10n.claudeFooter)
+                    .foregroundStyle(.secondary)
+                Button(L10n.getAPIKey) {
+                    if let url = URL(string: "https://console.anthropic.com/settings/keys") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
+                .buttonStyle(.link)
+            }
+        }
+    }
+
+    private var openAISection: some View {
+        Section {
+            TextField(L10n.apiAddress, text: $settings.openAIBaseURL, prompt: Text(verbatim: AISettings.defaultOpenAIBaseURL))
+            keyRow(for: .openAICompatible, placeholder: L10n.optionalKey)
+            LabeledContent(L10n.claudeModel) {
+                VStack(alignment: .trailing, spacing: 4) {
+                    HStack(spacing: 6) {
+                        if isLoadingModels {
+                            ProgressView().controlSize(.small)
+                        }
+                        ModelComboBox(text: $settings.openAIModel, items: models, placeholder: "model-name")
+                            .frame(width: 240)
+                    }
+                    if let modelsError {
+                        Text(modelsError)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        } footer: {
+            Text(L10n.openAIFooter)
+                .foregroundStyle(.secondary)
+        }
+        // Reload when the address or the key changes, after a pause so typing doesn't fire a request per key.
+        .task(id: "\(settings.openAIBaseURL)|\(settings.hasOpenAIKey)") {
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled else { return }
+            await loadModels()
+        }
+    }
+
+    private func loadModels() async {
+        guard let url = settings.openAIModelsURL else {
+            models = []
+            modelsError = nil
+            return
+        }
+        isLoadingModels = true
+        defer { isLoadingModels = false }
+        do {
+            let loaded = try await OpenAICompatibleTranslator.models(at: url, apiKey: settings.openAIKey)
+            guard !Task.isCancelled else { return }
+            models = loaded
+            modelsError = loaded.isEmpty ? L10n.aiNoModels : nil
+        } catch {
+            guard !Task.isCancelled else { return }
+            models = []
+            modelsError = L10n.aiModelsFailed(error.localizedDescription)
+        }
     }
 
     @ViewBuilder
-    private var apiKeyRow: some View {
-        if claude.hasAPIKey {
+    private func keyRow(for provider: AIProvider, placeholder: String) -> some View {
+        let hasKey = provider == .claude ? settings.hasClaudeKey : settings.hasOpenAIKey
+        if hasKey {
             LabeledContent(L10n.apiKey) {
                 HStack(spacing: 10) {
                     Text(L10n.apiKeySaved)
                         .foregroundStyle(.secondary)
                     Button(L10n.remove, role: .destructive) {
-                        claude.remove()
+                        settings.removeKey(for: provider)
                     }
                 }
             }
         } else {
             HStack(spacing: 8) {
-                SecureField(L10n.apiKey, text: $apiKeyDraft, prompt: Text(verbatim: "sk-ant-…"))
-                    .onSubmit(saveAPIKey)
-                Button(L10n.save, action: saveAPIKey)
-                    .disabled(apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                SecureField(L10n.apiKey, text: $keyDraft, prompt: Text(verbatim: placeholder))
+                    .onSubmit { saveKey(for: provider) }
+                Button(L10n.save) { saveKey(for: provider) }
+                    .disabled(keyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
     }
 
-    private func saveAPIKey() {
-        if claude.save(apiKeyDraft) {
-            apiKeyDraft = ""
+    private func saveKey(for provider: AIProvider) {
+        if settings.saveKey(keyDraft, for: provider) {
+            keyDraft = ""
+        }
+    }
+}
+
+/// An editable field with a drop-down list: pick a model the server offers, or type any name.
+/// AppKit's combo box also completes the name while typing, handy for long lists like OpenRouter's.
+private struct ModelComboBox: NSViewRepresentable {
+    @Binding var text: String
+    let items: [String]
+    let placeholder: String
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(text: $text)
+    }
+
+    func makeNSView(context: Context) -> NSComboBox {
+        let box = NSComboBox()
+        box.completes = true
+        box.numberOfVisibleItems = 12
+        box.delegate = context.coordinator
+        return box
+    }
+
+    func updateNSView(_ box: NSComboBox, context: Context) {
+        context.coordinator.text = $text
+        if (box.objectValues as? [String]) != items {
+            box.removeAllItems()
+            box.addItems(withObjectValues: items)
+        }
+        if box.stringValue != text {
+            box.stringValue = text
+        }
+        box.placeholderString = placeholder
+    }
+
+    final class Coordinator: NSObject, NSComboBoxDelegate {
+        var text: Binding<String>
+
+        init(text: Binding<String>) {
+            self.text = text
+        }
+
+        func controlTextDidChange(_ notification: Notification) {
+            guard let box = notification.object as? NSComboBox else { return }
+            text.wrappedValue = box.stringValue
+        }
+
+        func comboBoxSelectionDidChange(_ notification: Notification) {
+            guard let box = notification.object as? NSComboBox,
+                  let selected = box.objectValueOfSelectedItem as? String else { return }
+            text.wrappedValue = selected
         }
     }
 }

@@ -89,7 +89,7 @@ struct PopupView: View {
                 .opacity(model.isRefreshing || model.improvement == .working ? 0.4 : 1)
                 switch model.improvement {
                 case .done:
-                    Label(L10n.improvedByClaude, systemImage: "sparkles")
+                    Label(L10n.improvedBy(model.improvedBy), systemImage: "sparkles")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                         .padding(.leading, 2)
@@ -124,8 +124,8 @@ struct PopupView: View {
         // Stays enabled while working so the pulsing icon isn't dimmed; `improve()` ignores repeat presses.
         .disabled(model.improvement == .done)
         .keyboardShortcut("i", modifiers: .command)
-        .help(L10n.improveWithClaude)
-        .accessibilityLabel(L10n.improveWithClaude)
+        .help(L10n.improveWith(AISettings.shared.provider.title))
+        .accessibilityLabel(L10n.improveWith(AISettings.shared.provider.title))
     }
 
     private var copyTitle: some View {
@@ -159,7 +159,7 @@ struct PopupView: View {
         switch model.phase {
         case .loading, .result:
             HStack(spacing: 8) {
-                if ClaudeSettings.shared.hasAPIKey {
+                if AISettings.shared.isConfigured {
                     improveButton
                 }
                 // Text from the screen has nothing to paste over, so there's no Replace to explain.

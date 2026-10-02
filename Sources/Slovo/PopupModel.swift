@@ -11,7 +11,7 @@ struct LanguagePair: Equatable {
 
 @Observable
 final class PopupModel {
-    /// "Improve with Claude": the result replaces Apple's translation once it's complete.
+    /// "Improve with AI": the result replaces Apple's translation once it's complete.
     enum Improvement: Equatable {
         case idle
         case working
@@ -38,6 +38,8 @@ final class PopupModel {
     /// Re-translating after a language change: the previous result stays visible, dimmed.
     private(set) var isRefreshing = false
     private(set) var improvement = Improvement.idle
+    /// Who rewrote the translation, for the "Improved by …" caption.
+    private(set) var improvedBy = ""
     private(set) var isEditable = true
     private(set) var textSource = TextSource.selection
     var justCopied = false
@@ -140,23 +142,24 @@ final class PopupModel {
         phase == .result && !isRefreshing && improvement != .working && improvement != .done
     }
 
-    /// Sends the text and Apple's draft to Claude; Apple's translation stays (dimmed) until the result is in.
+    /// Sends the text and Apple's draft to the AI provider; Apple's translation stays (dimmed) until the result is in.
     func improve() {
-        let claude = ClaudeSettings.shared
-        guard canImprove, let pair, let apiKey = claude.apiKey else { return }
-        let model = claude.model
+        let settings = AISettings.shared
+        guard canImprove, settings.isConfigured, let pair else { return }
+        let improver = settings.improverName
         let source = sourceText
         let draft = translation
         animated { improvement = .working }
         improveTask = Task {
             do {
-                let improved = try await ClaudeTranslator.improve(
-                    source: source, draft: draft, from: pair.source, to: pair.target, model: model, apiKey: apiKey
+                let improved = try await AITranslator.improve(
+                    source: source, draft: draft, from: pair.source, to: pair.target, settings: settings
                 )
                 guard !Task.isCancelled else { return }
                 TranslationHistory.shared.record(source: source, translation: improved, pair: pair)
                 animated {
                     translation = improved
+                    improvedBy = improver
                     improvement = .done
                 }
             } catch {
