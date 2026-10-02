@@ -52,3 +52,35 @@ enum TextReplacer {
         }
     }
 }
+
+/// For the custom "translate selection" shortcut: copies the selection by posting ⌘C to the
+/// frontmost app, reads it, then puts the user's clipboard back as it was.
+enum SelectionCopier {
+    static func copySelection() async -> String? {
+        let pasteboard = NSPasteboard.general
+        let saved = Pasteboard.snapshot()
+        let before = pasteboard.changeCount
+        postCommandC()
+
+        // Apps write the copy asynchronously; with nothing selected the pasteboard doesn't change.
+        var waited = 0
+        while pasteboard.changeCount == before && waited < 300 {
+            try? await Task.sleep(for: .milliseconds(15))
+            waited += 15
+        }
+        guard pasteboard.changeCount != before else { return nil }
+        let text = pasteboard.string(forType: .string)
+        Pasteboard.restore(saved)
+        return text
+    }
+
+    private static func postCommandC() {
+        // A private event state, so modifiers still held from the shortcut (⌥ in ⌥D) don't turn it into ⌥⌘C.
+        let source = CGEventSource(stateID: .privateState)
+        for isDown in [true, false] {
+            let event = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_ANSI_C), keyDown: isDown)
+            event?.flags = .maskCommand
+            event?.post(tap: .cghidEventTap)
+        }
+    }
+}

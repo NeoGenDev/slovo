@@ -31,7 +31,9 @@ private struct MenuContent: View {
 
     var body: some View {
         if controller.isTrusted {
-            Text(L10n.shortcutHint)
+            if let hint = selectionHint {
+                Text(hint)
+            }
         } else {
             Button(L10n.allowAccessibility) {
                 Accessibility.openSettings()
@@ -41,7 +43,7 @@ private struct MenuContent: View {
             controller.translateScreenArea()
         }
         // Shown as a hint; the global hot key handles the keystroke itself.
-        .keyboardShortcut("2", modifiers: [.command, .shift])
+        .keyboardShortcut(HotKeySettings.shared.combo(for: .screenArea)?.keyboardShortcut)
         if let app = controller.lastActiveApp, let bundleID = app.bundleIdentifier {
             Toggle(
                 L10n.disableIn(app.localizedName ?? AppInfo.name(for: bundleID)),
@@ -67,6 +69,15 @@ private struct MenuContent: View {
             NSApp.terminate(nil)
         }
         .keyboardShortcut("q")
+    }
+
+    /// "⌘C C or ⌥D — translate selection", from whichever selection shortcuts are on.
+    private var selectionHint: String? {
+        let hotKeys = HotKeySettings.shared
+        var shortcuts: [String] = []
+        if hotKeys.doubleCopyEnabled { shortcuts.append("⌘C C") }
+        if let combo = hotKeys.combo(for: .selection) { shortcuts.append(combo.displayString) }
+        return shortcuts.isEmpty ? nil : L10n.selectionHint(shortcuts)
     }
 }
 

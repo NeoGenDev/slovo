@@ -8,7 +8,8 @@ import Carbon.HIToolbox
 final class DoubleCopyMonitor {
     var onTrigger: (() -> Void)?
 
-    private let maxInterval: TimeInterval = 0.45
+    /// Longest pause between the two presses; the shortcut recorder uses it too.
+    static let maxInterval: TimeInterval = 0.45
     private var monitor: Any?
     private var lastCopyAt: TimeInterval?
 
@@ -33,7 +34,7 @@ final class DoubleCopyMonitor {
         }
         guard !event.isARepeat else { return }
 
-        if let lastCopyAt, event.timestamp - lastCopyAt <= maxInterval {
+        if let lastCopyAt, event.timestamp - lastCopyAt <= Self.maxInterval {
             self.lastCopyAt = nil
             onTrigger?()
         } else {

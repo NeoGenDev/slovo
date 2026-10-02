@@ -15,7 +15,6 @@ nonisolated enum L10n {
     }
 
     // Menu bar
-    static let shortcutHint = pick("⌘C C — перевести выделенное", "⌘C C — translate selection")
     static let allowAccessibility = pick("Разрешить Универсальный доступ…", "Allow Accessibility Access…")
     static let translateScreenArea = pick("Перевести область экрана", "Translate Screen Area")
     static let settings = pick("Настройки…", "Settings…")
@@ -76,13 +75,37 @@ nonisolated enum L10n {
         "The ✦ button in the popup (⌘I) sends the original and the translation to Anthropic, and the selected model rewrites the translation to read more naturally. Requests are billed at Anthropic API rates."
     )
     static let general = pick("Общие", "General")
-    static let shortcut = pick("Сочетание клавиш", "Shortcut")
-    static let selectedTextShortcut = pick("Выделенный текст", "Selected text")
-    static let screenAreaShortcut = pick("Область экрана", "Screen area")
-    static let screenAreaFooter = pick(
-        "Для перевода области экрана нужно разрешение на запись экрана: macOS попросит его при первом использовании. Текст распознаётся прямо на Mac.",
-        "Translating a screen area needs the Screen Recording permission: macOS asks for it the first time. Text is recognized right on your Mac."
+    static let shortcuts = pick("Сочетания клавиш", "Shortcuts")
+    static let pressCommandCAgain = pick("Нажмите ⌘C ещё раз", "Press ⌘C again")
+
+    static func recordingHint(for action: HotKeySettings.Action) -> String {
+        switch action {
+        case .selection: pick("Esc — отмена · ⌘C дважды — ⌘C C", "Esc cancels · ⌘C twice for ⌘C C")
+        case .screenArea: pick("Esc — отмена", "Esc cancels")
+        }
+    }
+    static let notSet = pick("Не задано", "None")
+    static let pressShortcut = pick("Нажмите сочетание…", "Press shortcut…")
+    static let clearShortcut = pick("Убрать сочетание", "Remove Shortcut")
+    static let spaceKey = pick("Пробел", "Space")
+    static let hotKeyTaken = pick("macOS не дала назначить это сочетание, выберите другое", "macOS didn't accept this shortcut; choose another")
+    static let hotKeyNeedsModifier = pick(
+        "Нужен ⌃ или ⌥, либо ⇧⌘ вместе: остальные сочетания заняты приложениями и набором текста",
+        "Use ⌃ or ⌥, or ⇧⌘ together: other combinations belong to apps and typing"
     )
+
+    static func hotKeyInUse(_ title: String) -> String {
+        pick("Уже назначено: «\(title)»", "Already used for \(title)")
+    }
+
+    static func selectionHint(_ shortcuts: [String]) -> String {
+        pick(
+            shortcuts.joined(separator: " или ") + " — перевести выделенное",
+            shortcuts.joined(separator: " or ") + " — translate selection"
+        )
+    }
+    static let selectedTextShortcut = pick("Перевести выделенное", "Translate Selection")
+    static let screenAreaShortcut = translateScreenArea
     static let openAtLogin = pick("Открывать при входе", "Open at Login")
 
     // Popup

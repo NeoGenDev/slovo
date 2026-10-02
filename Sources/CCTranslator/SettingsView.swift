@@ -1,3 +1,4 @@
+import Carbon.HIToolbox
 import SwiftUI
 import Translation
 import UniformTypeIdentifiers
@@ -45,23 +46,152 @@ private extension View {
 
 private struct GeneralPane: View {
     @Bindable var controller: AppController
+    var hotKeys = HotKeySettings.shared
 
     var body: some View {
         Form {
             Section {
-                LabeledContent(L10n.selectedTextShortcut, value: "⌘C C")
-                LabeledContent(L10n.screenAreaShortcut, value: "⇧⌘2")
+                LabeledContent(L10n.selectedTextShortcut) {
+                    HotKeyRecorder(action: .selection, hotKeys: hotKeys)
+                }
+                LabeledContent(L10n.screenAreaShortcut) {
+                    HotKeyRecorder(action: .screenArea, hotKeys: hotKeys)
+                }
             } header: {
-                Text(L10n.shortcut)
-            } footer: {
-                Text(L10n.screenAreaFooter)
-                    .foregroundStyle(.secondary)
+                Text(L10n.shortcuts)
             }
             Section {
                 Toggle(L10n.openAtLogin, isOn: $controller.launchAtLogin)
             }
         }
         .settingsPane()
+    }
+}
+
+/// Click, then press the new shortcut: Esc cancels, Delete removes it, and for the selection
+/// ⌘C pressed twice brings back ⌘C C.
+private struct HotKeyRecorder: View {
+    let action: HotKeySettings.Action
+    let hotKeys: HotKeySettings
+
+    @State private var monitor: Any?
+    @State private var problem: String?
+    @State private var hint: String?
+    /// When ⌘C was pressed while recording the selection's shortcut, waiting for the second press.
+    @State private var firstCopyAt: TimeInterval?
+
+    private var isRecording: Bool {
+        hotKeys.recordingAction == action
+    }
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 4) {
+            HStack(spacing: 6) {
+                if hotKeys.shortcutDisplay(for: action) != nil, !isRecording {
+                    Button {
+                        problem = nil
+                        _ = hotKeys.assign(nil, to: action)
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                    }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(.secondary)
+                    .help(L10n.clearShortcut)
+                    .accessibilityLabel(L10n.clearShortcut)
+                }
+                Button(action: toggleRecording) {
+                    Text(isRecording ? L10n.pressShortcut : hotKeys.shortcutDisplay(for: action) ?? L10n.notSet)
+                        .foregroundStyle(isRecording ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
+                        .frame(minWidth: 120)
+                }
+            }
+            if let message = problem ?? hotKeys.registrationErrors[action] {
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .multilineTextAlignment(.trailing)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if isRecording {
+                // Only while recording, right where it's needed, instead of a paragraph under the section.
+                Text(hint ?? L10n.recordingHint(for: action))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.trailing)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        // Another recorder took over, or recording ended.
+        .onChange(of: hotKeys.recordingAction) { _, recording in
+            if recording != action { removeMonitor() }
+        }
+        .onDisappear(perform: stopRecording)
+        // Global shortcuts stay off while recording; don't leave them off when the user switches apps.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
+            stopRecording()
+        }
+    }
+
+    private func toggleRecording() {
+        if isRecording {
+            stopRecording()
+            return
+        }
+        problem = nil
+        hint = nil
+        firstCopyAt = nil
+        hotKeys.recordingAction = action
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            handle(event)
+            return nil
+        }
+    }
+
+    private func handle(_ event: NSEvent) {
+        guard !event.isARepeat else { return }
+        let keyCode = Int(event.keyCode)
+        let isPlain = event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty
+        let combo = KeyCombo(event: event)
+        let isCommandC = combo == KeyCombo(keyCode: UInt32(kVK_ANSI_C), modifiers: UInt32(cmdKey))
+
+        if action == .selection && isCommandC {
+            // ⌘C on its own isn't allowed as a global shortcut, but ⌘C twice is the default.
+            if let firstCopyAt, event.timestamp - firstCopyAt <= DoubleCopyMonitor.maxInterval {
+                hotKeys.assignDoubleCopy()
+                problem = nil
+                stopRecording()
+            } else {
+                firstCopyAt = event.timestamp
+                problem = nil
+                hint = L10n.pressCommandCAgain
+            }
+            return
+        }
+        firstCopyAt = nil
+        hint = nil
+
+        if isPlain && keyCode == kVK_Escape {
+            stopRecording()
+        } else if isPlain && (keyCode == kVK_Delete || keyCode == kVK_ForwardDelete) {
+            problem = nil
+            _ = hotKeys.assign(nil, to: action)
+            stopRecording()
+        } else if let problem = hotKeys.assign(combo, to: action) {
+            self.problem = problem
+            NSSound.beep()
+        } else {
+            problem = nil
+            stopRecording()
+        }
+    }
+
+    private func stopRecording() {
+        removeMonitor()
+        if isRecording { hotKeys.recordingAction = nil }
+    }
+
+    private func removeMonitor() {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
     }
 }
 

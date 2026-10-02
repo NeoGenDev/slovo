@@ -3,7 +3,7 @@ import Carbon.HIToolbox
 import Observation
 import ServiceManagement
 
-/// Wires the global ⌘C C shortcut to the translation popup and owns app-wide state.
+/// Wires the global shortcuts to the translation popup and owns app-wide state.
 @Observable
 final class AppController {
     private(set) var isTrusted = Accessibility.isTrusted
@@ -19,15 +19,14 @@ final class AppController {
     @ObservationIgnored private let popup = PopupController()
     @ObservationIgnored private var trustTimer: Timer?
     @ObservationIgnored private var activationObserver: NSObjectProtocol?
-    @ObservationIgnored private var screenAreaHotKey: GlobalHotKey?
+    @ObservationIgnored private let hotKeys = HotKeySettings.shared
+    @ObservationIgnored private var registeredHotKeys: [HotKeySettings.Action: GlobalHotKey] = [:]
     @ObservationIgnored private var isCapturingScreen = false
 
     func start() {
         hotkey.onTrigger = { [weak self] in self?.handleDoubleCopy() }
-        // ⇧⌘2, next to the system's ⇧⌘3/4/5 screenshot shortcuts.
-        screenAreaHotKey = GlobalHotKey(keyCode: kVK_ANSI_2, modifiers: cmdKey | shiftKey) { [weak self] in
-            self?.translateScreenArea()
-        }
+        hotKeys.onChange = { [weak self] in self?.applyHotKeys() }
+        applyHotKeys()
         trackActiveApp()
 
         // Load the language list up front so the first popup doesn't wait for it.
@@ -42,11 +41,61 @@ final class AppController {
             popup.show(text: arguments[index + 1], context: SelectionContext(app: nil, isEditable: true, selectionRect: nil))
         }
 
-        if isTrusted {
-            hotkey.start()
-        } else {
+        if !isTrusted {
             Accessibility.prompt()
             watchForTrust()
+        }
+    }
+
+    /// (Re)registers the shortcuts from `HotKeySettings`: at launch, whenever they change, and
+    /// with none while a new one is being recorded.
+    private func applyHotKeys() {
+        for hotKey in registeredHotKeys.values { hotKey.unregister() }
+        registeredHotKeys = [:]
+        let isRecording = hotKeys.recordingAction != nil
+
+        if hotKeys.doubleCopyEnabled && isTrusted && !isRecording {
+            hotkey.start()
+        } else {
+            hotkey.stop()
+        }
+
+        var errors: [HotKeySettings.Action: String] = [:]
+        if !isRecording {
+            for action in HotKeySettings.Action.allCases {
+                guard let combo = hotKeys.combo(for: action) else { continue }
+                if let hotKey = GlobalHotKey(combo: combo, action: { [weak self] in self?.perform(action) }) {
+                    registeredHotKeys[action] = hotKey
+                } else {
+                    errors[action] = L10n.hotKeyTaken
+                }
+            }
+        }
+        hotKeys.registrationErrors = errors
+    }
+
+    private func perform(_ action: HotKeySettings.Action) {
+        switch action {
+        case .selection: translateSelection()
+        case .screenArea: translateScreenArea()
+        }
+    }
+
+    /// The custom selection shortcut: copies the selection itself, then translates it like ⌘C C.
+    /// Excluded apps don't apply: they guard against accidental double copies, and this is deliberate.
+    func translateSelection() {
+        guard isTrusted else {
+            Accessibility.prompt()
+            return
+        }
+        let context = SelectionInspector.capture()
+        Task {
+            guard let text = await SelectionCopier.copySelection(),
+                  !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                NSSound.beep()
+                return
+            }
+            popup.show(text: text, context: context)
         }
     }
 
@@ -62,7 +111,7 @@ final class AppController {
         isTrusted = true
         trustTimer?.invalidate()
         trustTimer = nil
-        hotkey.start()
+        applyHotKeys()
     }
 
     /// Lets the user pick an area of the screen, recognizes its text and translates it in the popup.

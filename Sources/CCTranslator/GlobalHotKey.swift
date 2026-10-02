@@ -2,6 +2,7 @@ import Carbon.HIToolbox
 
 /// A system-wide shortcut registered with the Carbon Event Manager. Unlike the ⌘C C monitor it
 /// consumes the keystroke, so the frontmost app doesn't also act on it, and needs no permission.
+/// Call `unregister()` before letting go of it: the event handler holds an unretained pointer to it.
 final class GlobalHotKey {
     private static let signature: OSType = 0x4343_5452 // "CCTR"
     private static var nextID: UInt32 = 1
@@ -11,8 +12,9 @@ final class GlobalHotKey {
     private var hotKeyRef: EventHotKeyRef?
     private var handlerRef: EventHandlerRef?
 
-    /// `keyCode` is a `kVK_…` constant, `modifiers` a mask of `cmdKey`, `shiftKey`, `optionKey`, `controlKey`.
-    init(keyCode: Int, modifiers: Int, action: @escaping () -> Void) {
+    /// Fails when the combination is already registered in this process. macOS doesn't report
+    /// clashes with other apps: their registration of the same keys succeeds as well.
+    init?(combo: KeyCombo, action: @escaping () -> Void) {
         id = Self.nextID
         Self.nextID += 1
         self.action = action
@@ -20,13 +22,21 @@ final class GlobalHotKey {
         var pressed = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
         InstallEventHandler(GetApplicationEventTarget(), Self.handle, 1, &pressed, Unmanaged.passUnretained(self).toOpaque(), &handlerRef)
         let status = RegisterEventHotKey(
-            UInt32(keyCode), UInt32(modifiers), EventHotKeyID(signature: Self.signature, id: id),
+            combo.keyCode, combo.modifiers, EventHotKeyID(signature: Self.signature, id: id),
             GetApplicationEventTarget(), 0, &hotKeyRef
         )
-        // Fails with eventHotKeyExistsErr when another app already registered the same combination.
-        if status != noErr {
-            NSLog("CC Translator: couldn't register hot key \(keyCode) with modifiers \(modifiers): \(status)")
+        guard status == noErr else {
+            NSLog("CC Translator: couldn't register hot key \(combo.displayString): \(status)")
+            unregister()
+            return nil
         }
+    }
+
+    func unregister() {
+        if let hotKeyRef { UnregisterEventHotKey(hotKeyRef) }
+        if let handlerRef { RemoveEventHandler(handlerRef) }
+        hotKeyRef = nil
+        handlerRef = nil
     }
 
     /// Every registered hot key reaches every handler, so each one checks the ID it was given.
