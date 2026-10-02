@@ -57,6 +57,9 @@ private struct GeneralPane: View {
                 LabeledContent(L10n.screenAreaShortcut) {
                     HotKeyRecorder(action: .screenArea, hotKeys: hotKeys)
                 }
+                LabeledContent(L10n.composeShortcut) {
+                    HotKeyRecorder(action: .compose, hotKeys: hotKeys)
+                }
             } header: {
                 Text(L10n.shortcuts)
             }

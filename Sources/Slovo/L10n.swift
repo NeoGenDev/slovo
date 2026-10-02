@@ -17,6 +17,7 @@ nonisolated enum L10n {
     // Menu bar
     static let allowAccessibility = pick("Разрешить Универсальный доступ…", "Allow Accessibility Access…")
     static let translateScreenArea = pick("Перевести область экрана", "Translate Screen Area")
+    static let writeAndTranslate = pick("Написать с переводом", "Write and Translate")
     static let settings = pick("Настройки…", "Settings…")
     static let history = pick("История переводов", "Translation History")
     static let historyEmpty = pick("Пока пусто", "No translations yet")
@@ -86,7 +87,7 @@ nonisolated enum L10n {
     static func recordingHint(for action: HotKeySettings.Action) -> String {
         switch action {
         case .selection: pick("Esc — отмена · ⌘C дважды — ⌘C C", "Esc cancels · ⌘C twice for ⌘C C")
-        case .screenArea: pick("Esc — отмена", "Esc cancels")
+        case .screenArea, .compose: pick("Esc — отмена", "Esc cancels")
         }
     }
     static let notSet = pick("Не задано", "None")
@@ -111,6 +112,7 @@ nonisolated enum L10n {
     }
     static let selectedTextShortcut = pick("Перевести выделенное", "Translate Selection")
     static let screenAreaShortcut = translateScreenArea
+    static let composeShortcut = writeAndTranslate
     static let openAtLogin = pick("Открывать при входе", "Open at Login")
 
     // Popup
@@ -135,6 +137,8 @@ nonisolated enum L10n {
     static let copy = pick("Копировать", "Copy")
     static let copied = pick("Скопировано", "Copied")
     static let replace = pick("Заменить", "Replace")
+    static let insert = pick("Вставить", "Insert")
+    static let composePlaceholder = pick("Напишите текст", "Type to translate")
     static let readOnlyField = pick("Поле только для чтения", "Read-only field")
     static let languagesNeeded = pick("Нужно скачать языки", "Languages need to be downloaded")
     static let downloadExplanation = pick(

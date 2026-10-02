@@ -56,6 +56,13 @@ final class PopupModel {
     private(set) var isLong = false
     private(set) var chunks: [Chunk] = []
     private(set) var translatedChunkCount = 0
+    /// Writing mode: the user types in `draft`, and the translation follows as they type.
+    private(set) var isComposing = false
+    var draft = "" {
+        didSet {
+            if isComposing, draft != oldValue { scheduleComposedTranslation() }
+        }
+    }
     private(set) var isEditable = true
     private(set) var textSource = TextSource.selection
     var justCopied = false
@@ -77,6 +84,11 @@ final class PopupModel {
     @ObservationIgnored private let settings = LanguageSettings.shared
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private var improveTask: Task<Void, Never>?
+    /// The text the current `translation` was made from; in writing mode typing can get ahead of it.
+    @ObservationIgnored private var translatedSource = ""
+    @ObservationIgnored private var isSubmitting = false
+    /// A pause in typing before the draft is translated.
+    private static let composeDelay = Duration.milliseconds(250)
 
     func start(text: String, isEditable: Bool, source: TextSource) {
         reset(text: text, isEditable: isEditable, source: source)
@@ -104,6 +116,15 @@ final class PopupModel {
         }
     }
 
+    /// An empty popup to write in your language; the translation goes into the language of the conversation.
+    func startComposing(isEditable: Bool) {
+        reset(text: "", isEditable: isEditable, source: .selection)
+        isComposing = true
+        let source = settings.primary
+        pair = LanguagePair(source: source, target: settings.target(forSource: source))
+        phase = .result
+    }
+
     /// A popup that only carries a message, e.g. when a screen area had no text in it.
     func showFailure(_ message: String) {
         reset(text: "", isEditable: false, source: .screen)
@@ -116,6 +137,10 @@ final class PopupModel {
         translation = ""
         pair = nil
         dictionaryEntry = nil
+        isComposing = false
+        draft = ""
+        translatedSource = ""
+        isSubmitting = false
         isLong = false
         chunks = []
         translatedChunkCount = 0
@@ -136,6 +161,14 @@ final class PopupModel {
         guard pair != self.pair, pair.source != pair.target else { return }
 
         cancel()
+        if isComposing {
+            sourceText = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+            // Nothing typed yet: only the languages change.
+            guard !sourceText.isEmpty else {
+                self.pair = pair
+                return
+            }
+        }
         downloadConfiguration = nil
         animated {
             self.pair = pair
@@ -199,6 +232,65 @@ final class PopupModel {
         }
     }
 
+    /// Translates the draft once typing pauses. The previous translation stays until the new one is in.
+    private func scheduleComposedTranslation() {
+        task?.cancel()
+        improveTask?.cancel()
+        if improvement != .idle { animated { improvement = .idle } }
+        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let pair, !text.isEmpty else {
+            animated {
+                translation = ""
+                if phase != .needsDownload && phase != .downloading { phase = .result }
+            }
+            translatedSource = ""
+            return
+        }
+        task = Task {
+            try? await Task.sleep(for: Self.composeDelay)
+            guard !Task.isCancelled else { return }
+            sourceText = text
+            await translate(pair)
+        }
+    }
+
+    var canSubmitComposition: Bool {
+        isComposing && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && phase == .result && improvement != .working
+    }
+
+    /// ↩ or a button in writing mode: inserts (or copies) the translation of exactly what's typed,
+    /// translating the last keystrokes first if typing got ahead of the translation.
+    func submitComposition(insert: Bool) {
+        guard canSubmitComposition, !isSubmitting, let pair else { return }
+        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        isSubmitting = true
+        if text == translatedSource, !translation.isEmpty {
+            finishComposing(pair, insert: insert)
+            return
+        }
+        task?.cancel()
+        sourceText = text
+        task = Task {
+            await translate(pair)
+            guard !Task.isCancelled, phase == .result, translatedSource == text else {
+                isSubmitting = false
+                return
+            }
+            finishComposing(pair, insert: insert)
+        }
+    }
+
+    private func finishComposing(_ pair: LanguagePair, insert: Bool) {
+        settings.remember(pair)
+        TranslationHistory.shared.record(source: translatedSource, translation: translation, pair: pair)
+        if insert && isEditable {
+            onReplace()
+        } else {
+            onCopy()
+        }
+    }
+
     func requestDownload() {
         guard let pair else { return }
         animated { phase = .downloading }
@@ -220,8 +312,10 @@ final class PopupModel {
                 task = Task { await translate(pair) }
                 return
             }
-            let response = try await session.translate(sourceText)
+            let text = sourceText
+            let response = try await session.translate(text)
             if let pair { didTranslate(pair, into: response.targetText) }
+            translatedSource = text
             animated {
                 translation = response.targetText
                 phase = .result
@@ -246,9 +340,11 @@ final class PopupModel {
                 return
             }
             do {
-                let response = try await session.translate(sourceText)
+                let text = sourceText
+                let response = try await session.translate(text)
                 guard !Task.isCancelled else { return }
                 didTranslate(pair, into: response.targetText)
+                translatedSource = text
                 animated {
                     translation = response.targetText
                     isRefreshing = false
@@ -317,6 +413,8 @@ final class PopupModel {
     }
 
     private func didTranslate(_ pair: LanguagePair, into translation: String) {
+        // While writing, every pause in typing is translated; only what's inserted or copied counts.
+        guard !isComposing else { return }
         settings.remember(pair)
         TranslationHistory.shared.record(source: sourceText, translation: translation, pair: pair)
     }

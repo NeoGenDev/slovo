@@ -101,6 +101,15 @@ final class PopupController: NSObject, NSWindowDelegate {
         present(for: context)
     }
 
+    /// An empty popup to write in, under the caret of the field the translation will go into.
+    func compose(context: SelectionContext) {
+        prepareForNewPopup()
+        self.context = context
+        whitespace = ("", "")
+        model.startComposing(isEditable: context.isEditable)
+        present(for: context)
+    }
+
     /// A message-only popup, e.g. "no text found" after a screen capture.
     func showFailure(_ message: String) {
         prepareForNewPopup()
@@ -130,7 +139,7 @@ final class PopupController: NSObject, NSWindowDelegate {
             case .screen: positionInMiddleOfScreen()
             }
         }
-        panel.alphaValue = 0
+        setPanelAlpha(0)
         panel.orderFrontRegardless()
         startMouseMonitor()
         scheduleReveal(after: model.phase == .loading ? Self.skeletonDelay : Self.layoutSettleDelay)
@@ -157,7 +166,7 @@ final class PopupController: NSObject, NSWindowDelegate {
                 // A new popup may have been shown while this one was fading out.
                 guard let self, self.generation == closingGeneration else { return }
                 self.panel.orderOut(nil)
-                self.panel.alphaValue = 1
+                self.setPanelAlpha(1)
             }
         }
     }
@@ -259,15 +268,39 @@ final class PopupController: NSObject, NSWindowDelegate {
 
     private func applyFrame(animated: Bool = false) {
         let frame = targetFrame()
-        guard animated else {
-            panel.setFrame(frame, display: true)
-            return
-        }
+        setPanelFrame(frame, duration: animated ? 0.22 : 0, timing: .easeInEaseOut)
+    }
+
+    /// Every frame change goes through the animator, the instant ones with zero duration. A plain
+    /// `setFrame` doesn't stop a reveal or resize animation still running from the previous popup,
+    /// which then dragged the window back to its own frame.
+    private func setPanelFrame(_ frame: NSRect, duration: TimeInterval = 0, timing: CAMediaTimingFunctionName = .easeOut) {
         NSAnimationContext.runAnimationGroup { animation in
-            animation.duration = 0.22
-            animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            animation.duration = duration
+            animation.timingFunction = CAMediaTimingFunction(name: timing)
             panel.animator().setFrame(frame, display: true)
+        } completionHandler: { [weak self] in
+            MainActor.assumeIsolated { self?.syncContentSize() }
         }
+        guard duration == 0 else { return }
+        panel.setFrame(frame, display: true)
+        syncContentSize()
+    }
+
+    private func setPanelAlpha(_ alpha: CGFloat) {
+        NSAnimationContext.runAnimationGroup { animation in
+            animation.duration = 0
+            panel.animator().alphaValue = alpha
+        }
+        panel.alphaValue = alpha
+    }
+
+    /// The content view follows the window by the size difference, so once an interrupted animation
+    /// put them out of step, every later popup kept the error: a short card with only the text field.
+    private func syncContentSize() {
+        let size = panel.contentRect(forFrameRect: panel.frame).size
+        guard let content = panel.contentView, content.frame.size != size else { return }
+        content.frame = NSRect(origin: .zero, size: size)
     }
 
     // MARK: Reveal
@@ -303,7 +336,7 @@ final class PopupController: NSObject, NSWindowDelegate {
         case .top, .middle: slide = Self.revealSlide
         case .bottom: slide = -Self.revealSlide
         }
-        panel.setFrame(frame.offsetBy(dx: 0, dy: slide), display: false)
+        setPanelFrame(frame.offsetBy(dx: 0, dy: slide))
         panel.makeKeyAndOrderFront(nil)
 
         NSAnimationContext.runAnimationGroup { animation in
@@ -311,6 +344,8 @@ final class PopupController: NSObject, NSWindowDelegate {
             animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
             panel.animator().alphaValue = 1
             panel.animator().setFrame(frame, display: true)
+        } completionHandler: { [weak self] in
+            MainActor.assumeIsolated { self?.syncContentSize() }
         }
     }
 
@@ -386,6 +421,16 @@ private final class PopupContainerView: NSView {
     /// rect inset by the margin is a null rect) left the content permanently offset in the card.
     override func layout() {
         super.layout()
+        layoutCard()
+    }
+
+    /// Runs as soon as the window changes size. A layout pass alone doesn't always come before the
+    /// panel is revealed, and the new content then sat in a card of the previous popup's size.
+    override func resizeSubviews(withOldSize oldSize: NSSize) {
+        layoutCard()
+    }
+
+    private func layoutCard() {
         let margin = PopupMetrics.shadowMargin
         guard bounds.width > margin * 2, bounds.height > margin * 2 else { return }
         shadowView.frame = bounds
@@ -408,6 +453,16 @@ private final class ShadowView: NSView {
 
     override func layout() {
         super.layout()
+        updateShadow()
+    }
+
+    /// The shadow follows the card right away, for the same reason as the card itself.
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        updateShadow()
+    }
+
+    private func updateShadow() {
         guard let layer else { return }
         let margin = PopupMetrics.shadowMargin
         let radius = PopupMetrics.cornerRadius
@@ -430,3 +485,4 @@ private final class ShadowView: NSView {
         layer.mask = mask
     }
 }
+

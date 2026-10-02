@@ -40,10 +40,13 @@ final class AppController {
             LanguageSettings.shared.adopt(supported: LanguageCatalog.shared.keys)
         }
 
-        // Dev shortcut: `open build/Slovo.app --args --demo "Some text"` shows the popup at the pointer.
+        // Dev shortcuts: `open build/Slovo.app --args --demo "Some text"` shows the popup at the pointer,
+        // `--compose` the writing popup.
         let arguments = CommandLine.arguments
         if let index = arguments.firstIndex(of: "--demo"), arguments.indices.contains(index + 1) {
             popup.show(text: arguments[index + 1], context: SelectionContext(app: nil, isEditable: true, selectionRect: nil))
+        } else if arguments.contains("--compose") {
+            popup.compose(context: SelectionContext(app: nil, isEditable: true, selectionRect: nil))
         }
 
         if !isTrusted {
@@ -88,7 +91,18 @@ final class AppController {
         switch action {
         case .selection: translateSelection()
         case .screenArea: translateScreenArea()
+        case .compose: compose()
         }
+    }
+
+    /// An empty popup to write in. Insert pastes the translation where the caret was, so the popup
+    /// opens under it; inserting needs the same Accessibility permission as Replace.
+    func compose() {
+        guard isTrusted else {
+            Accessibility.prompt()
+            return
+        }
+        popup.compose(context: SelectionInspector.capture())
     }
 
     /// The custom selection shortcut: copies the selection itself, then translates it like ⌘C C.

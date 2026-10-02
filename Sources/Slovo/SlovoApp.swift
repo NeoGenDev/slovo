@@ -44,6 +44,10 @@ private struct MenuContent: View {
         }
         // Shown as a hint; the global hot key handles the keystroke itself.
         .keyboardShortcut(HotKeySettings.shared.combo(for: .screenArea)?.keyboardShortcut)
+        Button(L10n.writeAndTranslate) {
+            controller.compose()
+        }
+        .keyboardShortcut(HotKeySettings.shared.combo(for: .compose)?.keyboardShortcut)
         if let app = controller.lastActiveApp, let bundleID = app.bundleIdentifier {
             Toggle(
                 L10n.disableIn(app.localizedName ?? AppInfo.name(for: bundleID)),

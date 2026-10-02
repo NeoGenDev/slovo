@@ -34,7 +34,9 @@ struct PopupView: View {
     private var compactBody: some View {
         VStack(alignment: .leading, spacing: 12) {
             header
-            if !model.sourceText.isEmpty {
+            if model.isComposing {
+                ComposeField(model: model)
+            } else if !model.sourceText.isEmpty {
                 sourceRow
             }
             content
@@ -125,6 +127,8 @@ struct PopupView: View {
         switch model.phase {
         case .loading:
             SkeletonLines()
+        case .result where model.isComposing && model.translation.isEmpty:
+            EmptyView()
         case .result:
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .top, spacing: 8) {
@@ -179,8 +183,15 @@ struct PopupView: View {
     private var copyTitle: some View {
         HStack(spacing: 6) {
             Text(L10n.copy)
-            Text("⌘C").fontWeight(.medium).opacity(0.55)
+            if !model.isComposing {
+                Text("⌘C").fontWeight(.medium).opacity(0.55)
+            }
         }
+    }
+
+    private var footerDisabled: Bool {
+        if model.isComposing { return !model.canSubmitComposition }
+        return model.phase == .loading || model.isRefreshing || model.improvement == .working || model.isTranslatingChunks
     }
 
     private var downloadPrompt: some View {
@@ -217,7 +228,13 @@ struct PopupView: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 0)
-                Button(action: model.onCopy) {
+                Button {
+                    if model.isComposing {
+                        model.submitComposition(insert: false)
+                    } else {
+                        model.onCopy()
+                    }
+                } label: {
                     HStack(spacing: 6) {
                         ButtonIcon(name: model.justCopied ? "checkmark" : "doc.on.doc")
                             .contentTransition(.symbolEffect(.replace))
@@ -235,23 +252,38 @@ struct PopupView: View {
                     }
                 }
                 .glassButton(prominent: !model.isEditable)
-                .keyboardShortcut("c", modifiers: .command)
+                // While writing, ⌘C belongs to the text field.
+                .keyboardShortcut(model.isComposing ? nil : KeyboardShortcut("c", modifiers: .command))
 
                 if model.isEditable {
-                    Button(action: model.onReplace) {
-                        HStack(spacing: 6) {
-                            ButtonIcon(name: "arrow.left.arrow.right")
-                            Text(L10n.replace)
-                            Text("↩").fontWeight(.medium).opacity(0.7)
+                    if model.isComposing {
+                        // ↩ in the text field submits; a default-button shortcut here would fire twice.
+                        Button {
+                            model.submitComposition(insert: true)
+                        } label: {
+                            HStack(spacing: 6) {
+                                ButtonIcon(name: "text.insert")
+                                Text(L10n.insert)
+                                Text("↩").fontWeight(.medium).opacity(0.7)
+                            }
                         }
+                        .glassButton(prominent: true)
+                    } else {
+                        Button(action: model.onReplace) {
+                            HStack(spacing: 6) {
+                                ButtonIcon(name: "arrow.left.arrow.right")
+                                Text(L10n.replace)
+                                Text("↩").fontWeight(.medium).opacity(0.7)
+                            }
+                        }
+                        .glassButton(prominent: true)
+                        .keyboardShortcut(.defaultAction)
                     }
-                    .glassButton(prominent: true)
-                    .keyboardShortcut(.defaultAction)
                 }
             }
             .font(.system(size: 13, weight: .semibold))
             .controlSize(.large)
-            .disabled(model.phase == .loading || model.isRefreshing || model.improvement == .working || model.isTranslatingChunks)
+            .disabled(footerDisabled)
 
         case .needsDownload, .downloading:
             HStack(spacing: 8) {
@@ -512,6 +544,28 @@ private struct TranslationText: View {
         }
         .scrollBounceBehavior(.basedOnSize)
         .frame(maxHeight: PopupMetrics.maxTranslationHeight)
+    }
+}
+
+/// Where the user writes in writing mode. ↩ inserts the translation, ⌥↩ starts a new line.
+private struct ComposeField: View {
+    @Bindable var model: PopupModel
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        TextField(L10n.composePlaceholder, text: $model.draft, axis: .vertical)
+            .textFieldStyle(.plain)
+            .font(.system(size: 15))
+            .lineLimit(1...6)
+            .focused($isFocused)
+            .onSubmit { model.submitComposition(insert: true) }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(.primary.opacity(0.06), in: .rect(cornerRadius: PopupMetrics.cornerRadius - PopupMetrics.padding))
+            // The panel becomes key only when it's revealed; focus before that wouldn't stick.
+            .task(id: model.isRevealed) {
+                if model.isRevealed { isFocused = true }
+            }
     }
 }
 
