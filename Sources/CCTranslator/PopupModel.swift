@@ -11,6 +11,14 @@ struct LanguagePair: Equatable {
 
 @Observable
 final class PopupModel {
+    /// "Improve with Claude": the result replaces Apple's translation once it's complete.
+    enum Improvement: Equatable {
+        case idle
+        case working
+        case done
+        case failed(String)
+    }
+
     enum Phase: Equatable {
         case loading
         case result
@@ -29,6 +37,7 @@ final class PopupModel {
     private(set) var dictionaryEntry: DictionaryEntry?
     /// Re-translating after a language change: the previous result stays visible, dimmed.
     private(set) var isRefreshing = false
+    private(set) var improvement = Improvement.idle
     private(set) var isEditable = true
     var justCopied = false
     /// Bumped for every new popup. The view uses it as its identity, so each popup starts from fresh
@@ -48,6 +57,7 @@ final class PopupModel {
     @ObservationIgnored private let catalog = LanguageCatalog.shared
     @ObservationIgnored private let settings = LanguageSettings.shared
     @ObservationIgnored private var task: Task<Void, Never>?
+    @ObservationIgnored private var improveTask: Task<Void, Never>?
 
     func start(text: String, isEditable: Bool) {
         cancel()
@@ -55,6 +65,7 @@ final class PopupModel {
         translation = ""
         pair = nil
         isRefreshing = false
+        improvement = .idle
         justCopied = false
         downloadConfiguration = nil
         self.isEditable = isEditable
@@ -88,6 +99,7 @@ final class PopupModel {
         animated {
             self.pair = pair
             justCopied = false
+            improvement = .idle
             if phase == .result {
                 isRefreshing = true
             } else {
@@ -107,6 +119,38 @@ final class PopupModel {
     func cancel() {
         task?.cancel()
         task = nil
+        improveTask?.cancel()
+        improveTask = nil
+    }
+
+    var canImprove: Bool {
+        phase == .result && !isRefreshing && improvement != .working && improvement != .done
+    }
+
+    /// Sends the text and Apple's draft to Claude; Apple's translation stays (dimmed) until the result is in.
+    func improve() {
+        let claude = ClaudeSettings.shared
+        guard canImprove, let pair, let apiKey = claude.apiKey else { return }
+        let model = claude.model
+        let source = sourceText
+        let draft = translation
+        animated { improvement = .working }
+        improveTask = Task {
+            do {
+                let improved = try await ClaudeTranslator.improve(
+                    source: source, draft: draft, from: pair.source, to: pair.target, model: model, apiKey: apiKey
+                )
+                guard !Task.isCancelled else { return }
+                TranslationHistory.shared.record(source: source, translation: improved, pair: pair)
+                animated {
+                    translation = improved
+                    improvement = .done
+                }
+            } catch {
+                guard !Task.isCancelled else { return }
+                animated { improvement = .failed(error.localizedDescription) }
+            }
+        }
     }
 
     func requestDownload() {

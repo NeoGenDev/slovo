@@ -72,14 +72,31 @@ struct PopupView: View {
         case .loading:
             SkeletonLines()
         case .result:
-            HStack(alignment: .top, spacing: 8) {
-                TranslationText(text: model.translation)
-                if let pair = model.pair {
-                    SpeakButton(text: model.translation, language: pair.target, id: "translation", label: L10n.speakTranslation)
-                        .padding(.top, 3)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .top, spacing: 8) {
+                    TranslationText(text: model.translation)
+                    if let pair = model.pair {
+                        SpeakButton(text: model.translation, language: pair.target, id: "translation", label: L10n.speakTranslation)
+                            .padding(.top, 3)
+                    }
+                }
+                .opacity(model.isRefreshing || model.improvement == .working ? 0.4 : 1)
+                switch model.improvement {
+                case .done:
+                    Label(L10n.improvedByClaude, systemImage: "sparkles")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .padding(.leading, 2)
+                case .failed(let message):
+                    Label(message, systemImage: "exclamationmark.triangle")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.leading, 2)
+                case .idle, .working:
+                    EmptyView()
                 }
             }
-            .opacity(model.isRefreshing ? 0.4 : 1)
         case .needsDownload, .downloading:
             downloadPrompt
         case .failed(let message):
@@ -88,6 +105,21 @@ struct PopupView: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    /// Icon-only: the footer has no room for a third labelled button next to Copy and Replace.
+    private var improveButton: some View {
+        Button(action: model.improve) {
+            ButtonIcon(name: "sparkles")
+                .symbolEffect(.pulse, isActive: model.improvement == .working)
+        }
+        .glassButton(prominent: false)
+        .buttonBorderShape(.circle)
+        // Stays enabled while working so the pulsing icon isn't dimmed; `improve()` ignores repeat presses.
+        .disabled(model.improvement == .done)
+        .keyboardShortcut("i", modifiers: .command)
+        .help(L10n.improveWithClaude)
+        .accessibilityLabel(L10n.improveWithClaude)
     }
 
     private var copyTitle: some View {
@@ -121,6 +153,9 @@ struct PopupView: View {
         switch model.phase {
         case .loading, .result:
             HStack(spacing: 8) {
+                if ClaudeSettings.shared.hasAPIKey {
+                    improveButton
+                }
                 if !model.isEditable {
                     Text(L10n.readOnlyField)
                         .font(.system(size: 11))
@@ -161,7 +196,7 @@ struct PopupView: View {
             }
             .font(.system(size: 13, weight: .semibold))
             .controlSize(.large)
-            .disabled(model.phase == .loading || model.isRefreshing)
+            .disabled(model.phase == .loading || model.isRefreshing || model.improvement == .working)
 
         case .needsDownload, .downloading:
             HStack(spacing: 8) {

@@ -4,7 +4,8 @@ import Foundation
 ///
 /// `Locale.preferredLanguages` also reflects a per-app language picked in
 /// System Settings → General → Language & Region → Applications.
-enum L10n {
+/// Immutable strings and pure functions, so usable from any isolation (e.g. `LocalizedError`).
+nonisolated enum L10n {
     static let isRussian = Locale.preferredLanguages.first?.hasPrefix("ru") ?? false
     /// Locale for language names and other system-provided text in the UI.
     static let locale = Locale(identifier: isRussian ? "ru" : "en")
@@ -59,12 +60,27 @@ enum L10n {
     static let addApp = pick("Добавить приложение", "Add App")
     static let runningApps = pick("Запущенные", "Running")
     static let chooseApp = pick("Выбрать…", "Choose…")
+    static let apiKey = pick("API-ключ", "API key")
+    static let apiKeySaved = pick("Сохранён в Связке ключей", "Saved in Keychain")
+    static let save = pick("Сохранить", "Save")
+    static let remove = pick("Удалить", "Remove")
+    static let getAPIKey = pick("Получить ключ в Anthropic Console…", "Get a key in Anthropic Console…")
+    static let claudeModel = pick("Модель", "Model")
+    static let claudeOpusTitle = pick("Claude Opus 5.5 — точнее всего", "Claude Opus 5.5 — most accurate")
+    static let claudeSonnetTitle = pick("Claude Sonnet 5.5 — быстрее", "Claude Sonnet 5.5 — faster")
+    static let claudeHaikuTitle = pick("Claude Haiku 4.5 — самая быстрая", "Claude Haiku 4.5 — fastest")
+    static let claudeFooter = pick(
+        "Кнопка ✦ в попапе (⌘I) отправляет оригинал и перевод в Anthropic, и выбранная модель переписывает перевод естественнее. Запросы оплачиваются по тарифам Anthropic API.",
+        "The ✦ button in the popup (⌘I) sends the original and the translation to Anthropic, and the selected model rewrites the translation to read more naturally. Requests are billed at Anthropic API rates."
+    )
     static let general = pick("Общие", "General")
     static let shortcut = pick("Сочетание клавиш", "Shortcut")
     static let openAtLogin = pick("Открывать при входе", "Open at Login")
 
     // Popup
     static let close = pick("Закрыть", "Close")
+    static let improveWithClaude = pick("Улучшить через Claude (⌘I)", "Improve with Claude (⌘I)")
+    static let improvedByClaude = pick("Улучшено Claude", "Improved by Claude")
     static let speakOriginal = pick("Озвучить оригинал", "Speak Original")
     static let speakTranslation = pick("Озвучить перевод", "Speak Translation")
     static let stopSpeaking = pick("Остановить озвучку", "Stop Speaking")
@@ -102,6 +118,22 @@ enum L10n {
         "This translation direction isn't supported"
     )
     static let translationUnavailable = pick("Перевод сейчас недоступен", "Translation is unavailable right now")
+    static let claudeInvalidKey = pick(
+        "Неверный API-ключ Anthropic. Проверьте его в настройках.",
+        "The Anthropic API key is invalid. Check it in Settings."
+    )
+    static let claudeRateLimited = pick("Слишком много запросов к Claude. Попробуйте чуть позже.", "Too many requests to Claude. Try again shortly.")
+    static let claudeOverloaded = pick("Claude сейчас перегружен. Попробуйте ещё раз.", "Claude is overloaded right now. Try again.")
+    static let claudeRefused = pick("Claude отказался обрабатывать этот текст.", "Claude declined to process this text.")
+    static let claudeEmptyResponse = pick("Claude вернул пустой ответ.", "Claude returned an empty response.")
+
+    static func claudeNetworkError(_ reason: String) -> String {
+        pick("Не удалось связаться с Claude: \(reason)", "Couldn't reach Claude: \(reason)")
+    }
+
+    static func claudeError(_ message: String) -> String {
+        pick("Ошибка Claude: \(message)", "Claude error: \(message)")
+    }
 
     static func translationFailed(_ reason: String) -> String {
         pick("Не удалось перевести: \(reason)", "Couldn't translate: \(reason)")

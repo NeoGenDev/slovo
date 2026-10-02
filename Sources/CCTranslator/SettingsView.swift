@@ -7,6 +7,7 @@ struct SettingsView: View {
     @Bindable var controller: AppController
     let catalog: LanguageCatalog
     var excludedApps = ExcludedApps.shared
+    @Bindable var claude = ClaudeSettings.shared
 
     /// Keys of downloaded languages; nil until the first check finishes.
     @State private var installed: Set<String>?
@@ -14,6 +15,7 @@ struct SettingsView: View {
     @State private var downloadConfiguration: TranslationSession.Configuration?
     /// Bundle IDs of running regular apps that can still be excluded.
     @State private var runningApps: [String] = []
+    @State private var apiKeyDraft = ""
 
     var body: some View {
         Form {
@@ -55,6 +57,28 @@ struct SettingsView: View {
             } footer: {
                 Text(L10n.excludedAppsFooter)
                     .foregroundStyle(.secondary)
+            }
+
+            Section {
+                claudeKey
+                Picker(L10n.claudeModel, selection: $claude.model) {
+                    ForEach(ClaudeModel.allCases) { model in
+                        Text(model.title).tag(model)
+                    }
+                }
+            } header: {
+                Text("Claude")
+            } footer: {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(L10n.claudeFooter)
+                        .foregroundStyle(.secondary)
+                    Button(L10n.getAPIKey) {
+                        if let url = URL(string: "https://console.anthropic.com/settings/keys") {
+                            NSWorkspace.shared.open(url)
+                        }
+                    }
+                    .buttonStyle(.link)
+                }
             }
 
             Section(L10n.general) {
@@ -119,6 +143,34 @@ struct SettingsView: View {
         } else {
             ProgressView()
                 .frame(maxWidth: .infinity)
+        }
+    }
+
+    @ViewBuilder
+    private var claudeKey: some View {
+        if claude.hasAPIKey {
+            LabeledContent(L10n.apiKey) {
+                HStack(spacing: 10) {
+                    Text(L10n.apiKeySaved)
+                        .foregroundStyle(.secondary)
+                    Button(L10n.remove, role: .destructive) {
+                        claude.remove()
+                    }
+                }
+            }
+        } else {
+            HStack(spacing: 8) {
+                SecureField(L10n.apiKey, text: $apiKeyDraft, prompt: Text(verbatim: "sk-ant-…"))
+                    .onSubmit(saveAPIKey)
+                Button(L10n.save, action: saveAPIKey)
+                    .disabled(apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+    }
+
+    private func saveAPIKey() {
+        if claude.save(apiKeyDraft) {
+            apiKeyDraft = ""
         }
     }
 
