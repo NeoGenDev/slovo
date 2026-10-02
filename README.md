@@ -24,6 +24,7 @@ Translation runs on your Mac with Apple Translation: no account, no network, not
 - **Pin the popup.** The pin (⌘P) keeps the popup open when you click elsewhere, and the next translations open in it; drag it by the header to put it aside. Replace and Insert leave it open, so it works as a small translation window next to a chat.
 - **Long texts.** From about a thousand characters, for example a whole page copied with ⌘A, the translation opens in a large card in the middle of the screen. The text is translated paragraph by paragraph, and each paragraph replaces its dimmed original as soon as it's ready.
 - **Screen text.** ⇧⌘2 opens the system region picker. Text in the area is recognized on-device with Vision, wrapped lines are rebuilt into paragraphs, and the result opens in the same popup. Works on images, videos and anything you can't select.
+- **Translation over the screen.** ⌥⇧⌘2 lets you drag out an area, and each paragraph's translation is drawn right over the original, in its colors and at its size, like a translated screenshot. The eye button shows the original again; text already in your target language stays as it is.
 - **Single words.** One word gets a card from Dictionary.app: pronunciation when the dictionary has it, the start of the entry and a link to the full one.
 - **Read aloud.** 🔊 next to the original and the translation reads them with the best installed system voice for each language.
 - **Improve with AI.** One button (⌘I) sends the text and Apple's draft to Claude or any OpenAI-compatible API (OpenAI, OpenRouter, a local Ollama or LM Studio), which rewrites it to read naturally: idioms, slang, tone. Optional, with your own key; local servers need none.
@@ -41,7 +42,7 @@ Translation runs on your Mac with Apple Translation: no account, no network, not
 
 ## Menu bar and settings
 
-Slovo has no Dock icon. Everything else lives behind its menu bar icon: screen translation, writing with translation, the per-app switch for the app you were just in, history and settings.
+Slovo has no Dock icon. Everything else lives behind its menu bar icon: screen translation in a popup or over the screen, writing with translation, the per-app switch for the app you were just in, history and settings.
 
 <p align="center">
   <img src="docs/images/menu.png" width="645" alt="The menu bar menu with the translation history submenu open">
@@ -51,7 +52,7 @@ Settings are split into four tabs:
 
 | Tab | What's there |
 | --- | --- |
-| General | Shortcuts for translating the selection (⌘C C by default) and a screen area (⇧⌘2), and for writing with translation (⇧⌘1), Open at Login |
+| General | Shortcuts for translating the selection (⌘C C by default) and a screen area (⇧⌘2), translation over the screen (⌥⇧⌘2), writing with translation (⇧⌘1), Open at Login |
 | Languages | Your language, downloaded languages, downloading new ones |
 | Excluded Apps | Apps where Slovo's shortcuts are off |
 | AI | The provider: Claude (API key and a model from your account's list) or an OpenAI-compatible API (address, optional key, and a model picked from the server's list or typed in). Keys are kept in the Keychain |
@@ -66,6 +67,7 @@ Settings are split into four tabs:
 | --- | --- | --- |
 | Anywhere | ⌘C C | Translate the selection (configurable) |
 | Anywhere | ⇧⌘2 | Translate a screen area (configurable) |
+| Anywhere | ⌥⇧⌘2 | Translate a screen area over the original text (configurable) |
 | Anywhere | ⇧⌘1 | Write in your language and insert the translation (configurable) |
 | Popup | ↩ | Replace the selection with the translation |
 | Popup | ⌘C | Copy the translation |
@@ -129,6 +131,7 @@ open build/Slovo.app --args --demo "Some text to translate"
 | `PopupModel`, `PopupView` | Translation with `TranslationSession`, the popup's states and its SwiftUI views |
 | `PopupController` | A non-activating `NSPanel` in an `NSGlassEffectView`, so the source app keeps focus and Replace can paste with ⌘V |
 | `TextChunker` | Splits long texts into paragraphs and sentence groups for `TranslationSession`'s batch translation |
+| `RegionPicker`, `ScreenOverlay` | A crosshair that reports the picked rectangle, a ScreenCaptureKit shot of it, Vision paragraphs with their bounds, and colors sampled around and inside each one for the patches drawn over the screen |
 | `ScreenTextCapture` | `screencapture -i` for the region, then Vision's `RecognizeDocumentsRequest` |
 | `DictionaryLookup`, `Speaker` | Dictionary.app entries and `AVSpeechSynthesizer` |
 | `AITranslator`, `ClaudeTranslator`, `OpenAICompatibleTranslator` | One prompt for every provider; Claude's Messages API with server-side fallback on refusals, or streamed chat completions plus the server's model list |

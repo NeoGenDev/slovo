@@ -8,6 +8,8 @@ final class HotKeySettings {
         /// Translate the selected text; copies the selection itself, unlike ⌘C C.
         case selection
         case screenArea
+        /// Translate a screen area in place, drawing the translation over the original text.
+        case screenOverlay
         /// Write in your own language; the translation goes into the field you were typing in.
         case compose
 
@@ -15,6 +17,7 @@ final class HotKeySettings {
             switch self {
             case .selection: L10n.selectedTextShortcut
             case .screenArea: L10n.screenAreaShortcut
+            case .screenOverlay: L10n.translateOnScreen
             case .compose: L10n.composeShortcut
             }
         }
@@ -23,6 +26,7 @@ final class HotKeySettings {
             switch self {
             case .selection: "hotKey.selection"
             case .screenArea: "hotKey.screenArea"
+            case .screenOverlay: "hotKey.screenOverlay"
             case .compose: "hotKey.compose"
             }
         }
@@ -31,6 +35,7 @@ final class HotKeySettings {
             switch self {
             case .selection: nil
             case .screenArea: .screenAreaDefault
+            case .screenOverlay: .screenOverlayDefault
             case .compose: .composeDefault
             }
         }

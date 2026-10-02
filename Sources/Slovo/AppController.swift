@@ -17,6 +17,7 @@ final class AppController {
 
     @ObservationIgnored private let hotkey = DoubleCopyMonitor()
     @ObservationIgnored private let popup = PopupController()
+    @ObservationIgnored private let overlay = ScreenOverlayController()
     @ObservationIgnored private var trustTimer: Timer?
     @ObservationIgnored private var activationObserver: NSObjectProtocol?
     @ObservationIgnored private let hotKeys = HotKeySettings.shared
@@ -27,6 +28,11 @@ final class AppController {
 
     func start() {
         hotkey.onTrigger = { [weak self] in self?.handleDoubleCopy() }
+        overlay.onNoText = { [weak self] in self?.popup.showFailure(L10n.noTextFound) }
+        overlay.onNeedsPopup = { [weak self] text in
+            self?.popup.show(text: text, context: SelectionContext(app: nil, isEditable: false, selectionRect: nil, source: .screen))
+        }
+        overlay.onClosed = { [weak self] in self?.popup.showAgainIfPinned() }
         hotKeys.onChange = { [weak self] in self?.applyHotKeys() }
         ExcludedApps.shared.onChange = { [weak self] in
             self?.updateExclusion(for: NSWorkspace.shared.frontmostApplication)
@@ -91,6 +97,7 @@ final class AppController {
         switch action {
         case .selection: translateSelection()
         case .screenArea: translateScreenArea()
+        case .screenOverlay: translateOnScreen()
         case .compose: compose()
         }
     }
@@ -154,6 +161,23 @@ final class AppController {
             case .cancelled, .needsPermission:
                 popup.showAgainIfPinned()
             }
+        }
+    }
+
+    /// Pick an area like ⇧⌘2, then see the translation drawn over the original text in place.
+    func translateOnScreen() {
+        guard !isCapturingScreen, ScreenTextCapture.ensurePermission() else { return }
+        isCapturingScreen = true
+        popup.hideForScreenCapture()
+        overlay.close()
+        Task {
+            defer { isCapturingScreen = false }
+            let picker = RegionPicker()
+            guard let area = await picker.pick() else {
+                popup.showAgainIfPinned()
+                return
+            }
+            await overlay.show(area: area)
         }
     }
 

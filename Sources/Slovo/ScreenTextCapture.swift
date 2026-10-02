@@ -11,10 +11,7 @@ enum ScreenTextCapture {
     }
 
     static func run() async -> Outcome {
-        guard CGPreflightScreenCaptureAccess() else {
-            requestPermission()
-            return .needsPermission
-        }
+        guard ensurePermission() else { return .needsPermission }
         let url = FileManager.default.temporaryDirectory.appending(path: "slovo-\(UUID().uuidString).png")
         defer { try? FileManager.default.removeItem(at: url) }
 
@@ -49,6 +46,15 @@ enum ScreenTextCapture {
         request.textRecognitionOptions.useLanguageCorrection = true
         guard let document = try? await request.perform(on: url).first?.document else { return "" }
         return document.text.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Whether screen recording is allowed; asks for it when it isn't.
+    static func ensurePermission() -> Bool {
+        guard CGPreflightScreenCaptureAccess() else {
+            requestPermission()
+            return false
+        }
+        return true
     }
 
     /// macOS shows its own prompt only the first time; after that the switch lives in System Settings.

@@ -18,6 +18,7 @@ nonisolated enum L10n {
     static let allowAccessibility = pick("Разрешить Универсальный доступ…", "Allow Accessibility Access…")
     static let translateScreenArea = pick("Перевести область экрана", "Translate Screen Area")
     static let writeAndTranslate = pick("Написать с переводом", "Write and Translate")
+    static let translateOnScreen = pick("Перевести поверх экрана", "Translate on Screen")
     static let settings = pick("Настройки…", "Settings…")
     static let history = pick("История переводов", "Translation History")
     static let historyEmpty = pick("Пока пусто", "No translations yet")
@@ -87,7 +88,7 @@ nonisolated enum L10n {
     static func recordingHint(for action: HotKeySettings.Action) -> String {
         switch action {
         case .selection: pick("Esc — отмена · ⌘C дважды — ⌘C C", "Esc cancels · ⌘C twice for ⌘C C")
-        case .screenArea, .compose: pick("Esc — отмена", "Esc cancels")
+        case .screenArea, .screenOverlay, .compose: pick("Esc — отмена", "Esc cancels")
         }
     }
     static let notSet = pick("Не задано", "None")
@@ -117,6 +118,8 @@ nonisolated enum L10n {
 
     // Popup
     static let close = pick("Закрыть", "Close")
+    static let showOriginal = pick("Показать оригинал", "Show Original")
+    static let showTranslation = pick("Показать перевод", "Show Translation")
     static let pin = pick("Закрепить (⌘P)", "Pin (⌘P)")
     static let unpin = pick("Открепить (⌘P)", "Unpin (⌘P)")
     static func improveWith(_ name: String) -> String {

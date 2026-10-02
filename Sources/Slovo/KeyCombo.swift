@@ -8,6 +8,7 @@ struct KeyCombo: Equatable {
     var modifiers: UInt32
 
     static let screenAreaDefault = KeyCombo(keyCode: UInt32(kVK_ANSI_2), modifiers: UInt32(cmdKey | shiftKey))
+    static let screenOverlayDefault = KeyCombo(keyCode: UInt32(kVK_ANSI_2), modifiers: UInt32(cmdKey | shiftKey | optionKey))
     static let composeDefault = KeyCombo(keyCode: UInt32(kVK_ANSI_1), modifiers: UInt32(cmdKey | shiftKey))
 
     init(keyCode: UInt32, modifiers: UInt32) {

@@ -44,6 +44,10 @@ private struct MenuContent: View {
         }
         // Shown as a hint; the global hot key handles the keystroke itself.
         .keyboardShortcut(HotKeySettings.shared.combo(for: .screenArea)?.keyboardShortcut)
+        Button(L10n.translateOnScreen) {
+            controller.translateOnScreen()
+        }
+        .keyboardShortcut(HotKeySettings.shared.combo(for: .screenOverlay)?.keyboardShortcut)
         Button(L10n.writeAndTranslate) {
             controller.compose()
         }
