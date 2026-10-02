@@ -1,4 +1,4 @@
-APP := build/CC Translator.app
+APP := build/Slovo.app
 
 .PHONY: build run clean
 
@@ -6,7 +6,7 @@ build:
 	./scripts/build-app.sh
 
 run: build
-	-pkill -x CCTranslator
+	-pkill -x Slovo
 	open "$(APP)"
 
 clean:

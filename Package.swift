@@ -2,12 +2,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "CCTranslator",
+    name: "Slovo",
     platforms: [.macOS("26.0")],
     targets: [
         .executableTarget(
-            name: "CCTranslator",
-            path: "Sources/CCTranslator",
+            name: "Slovo",
+            path: "Sources/Slovo",
             swiftSettings: [.defaultIsolation(MainActor.self)]
         )
     ]

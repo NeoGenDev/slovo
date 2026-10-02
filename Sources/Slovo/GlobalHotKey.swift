@@ -4,7 +4,7 @@ import Carbon.HIToolbox
 /// consumes the keystroke, so the frontmost app doesn't also act on it, and needs no permission.
 /// Call `unregister()` before letting go of it: the event handler holds an unretained pointer to it.
 final class GlobalHotKey {
-    private static let signature: OSType = 0x4343_5452 // "CCTR"
+    private static let signature: OSType = 0x534C_564F // "SLVO"
     private static var nextID: UInt32 = 1
 
     private let id: UInt32
@@ -26,7 +26,7 @@ final class GlobalHotKey {
             GetApplicationEventTarget(), 0, &hotKeyRef
         )
         guard status == noErr else {
-            NSLog("CC Translator: couldn't register hot key \(combo.displayString): \(status)")
+            NSLog("Slovo: couldn't register hot key \(combo.displayString): \(status)")
             unregister()
             return nil
         }

@@ -36,7 +36,7 @@ final class ClaudeSettings {
         didSet { UserDefaults.standard.set(model.rawValue, forKey: Self.modelKey) }
     }
 
-    private static let service = "dev.cctranslator.app.anthropic"
+    private static let service = "\(Bundle.main.bundleIdentifier ?? "dev.slovo.app").anthropic"
     private static let account = "api-key"
     private static let modelKey = "claudeModel"
 

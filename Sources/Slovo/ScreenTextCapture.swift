@@ -15,7 +15,7 @@ enum ScreenTextCapture {
             requestPermission()
             return .needsPermission
         }
-        let url = FileManager.default.temporaryDirectory.appending(path: "cc-translator-\(UUID().uuidString).png")
+        let url = FileManager.default.temporaryDirectory.appending(path: "slovo-\(UUID().uuidString).png")
         defer { try? FileManager.default.removeItem(at: url) }
 
         guard await pickRegion(into: url), FileManager.default.fileExists(atPath: url.path) else {

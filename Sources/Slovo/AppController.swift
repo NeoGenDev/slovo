@@ -35,7 +35,7 @@ final class AppController {
             LanguageSettings.shared.adopt(supported: LanguageCatalog.shared.keys)
         }
 
-        // Dev shortcut: `open "build/CC Translator.app" --args --demo "Some text"` shows the popup at the pointer.
+        // Dev shortcut: `open build/Slovo.app --args --demo "Some text"` shows the popup at the pointer.
         let arguments = CommandLine.arguments
         if let index = arguments.firstIndex(of: "--demo"), arguments.indices.contains(index + 1) {
             popup.show(text: arguments[index + 1], context: SelectionContext(app: nil, isEditable: true, selectionRect: nil))
@@ -176,7 +176,7 @@ final class AppController {
                 try SMAppService.mainApp.unregister()
             }
         } catch {
-            NSLog("CC Translator: failed to update login item: \(error)")
+            NSLog("Slovo: failed to update login item: \(error)")
         }
     }
 }
