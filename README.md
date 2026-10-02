@@ -1,49 +1,113 @@
-# Slovo
+<p align="center">
+  <img src="docs/images/icon.png" width="128" height="128" alt="Slovo app icon">
+</p>
 
-Menu bar-переводчик для macOS 26: выдели текст, нажми **⌘C C**, и рядом появится попап в стиле Liquid Glass с переводом. Перевод делает Apple Translation прямо на устройстве.
+<h1 align="center">Slovo</h1>
 
-Язык текста определяется автоматически. Текст на любом другом языке переводится на «мой» язык (задаётся в настройках, **⌘,** в меню приложения). Текст на моём языке переводится на язык последнего перевода: прочитал письмо на немецком, нажал ⌘C C на своём ответе, и ответ переведётся на немецкий. Через капсулу с языками в попапе можно разово выбрать другой язык перевода или исправить язык оригинала.
+<p align="center">
+  A native macOS translator that lives in the menu bar.<br>
+  Select text anywhere, press <b>⌘C</b> twice, and a Liquid Glass popup translates it right next to your selection.
+</p>
 
-В настройках видны скачанные языки, а через меню «Скачать язык» можно скачать любой другой. Если язык текста ещё не скачан, попап сам предложит его скачать.
+<p align="center">
+  <img src="docs/images/hero.png" alt="Slovo translating a selected German sentence into English, in a popup under the selection">
+</p>
 
-**⇧⌘2** переводит область экрана: появляется системный инструмент выделения (как у ⇧⌘4; пробел — захват окна, Esc — отмена), текст в выбранной области распознаётся на устройстве через Vision (`RecognizeDocumentsRequest` собирает строки обратно в абзацы) и открывается в том же попапе. Нужно разрешение на запись экрана, macOS попросит его при первом использовании. Тот же пункт есть в меню иконки.
+Translation runs on your Mac with Apple Translation: no account, no network, nothing leaves the device unless you ask Claude to polish a translation.
 
-Сочетания клавиш настраиваются на вкладке «Основные». У «Перевести выделенное» по умолчанию ⌘C C; вместо него можно записать своё сочетание (оно само копирует выделение и затем возвращает буфер обмена), а вернуть ⌘C C — нажав при записи ⌘C дважды. У «Перевести область экрана» по умолчанию ⇧⌘2. Любое сочетание можно убрать. Глобально нельзя занять ⌘ с одной клавишей: нужен ⌃ или ⌥, либо ⇧⌘. Конфликты с сочетаниями других приложений macOS не сообщает.
+## Features
 
-Кнопки 🔊 рядом с оригиналом и переводом читают текст вслух системным голосом для его языка, офлайн. Если выделено одно слово, под переводом появляется карточка из системного «Словаря»: транскрипция (если словарь её даёт) и начало статьи, а ссылка «Открыть в Словаре» ведёт к полной статье. Какие словари используются, задаётся в настройках приложения «Словарь».
+- **⌘C C anywhere.** Copy as usual, press ⌘C once more, and the translation appears under the selection. Prefer one shortcut? Record your own in Settings.
+- **Replace in place.** ↩ pastes the translation over the selection, then puts your clipboard back as it was. Read-only text gets Copy instead.
+- **Automatic languages.** Slovo detects the language of the text. Anything foreign is translated into your language; text in your language goes back into the language you last translated from, so a reply lands in the language of the conversation. The language pill in the popup switches either side for a one-off.
+- **Screen text.** ⇧⌘2 opens the system region picker. Text in the area is recognized on-device with Vision, wrapped lines are rebuilt into paragraphs, and the result opens in the same popup. Works on images, videos and anything you can't select.
+- **Single words.** One word gets a card from Dictionary.app: pronunciation when the dictionary has it, the start of the entry and a link to the full one.
+- **Read aloud.** 🔊 next to the original and the translation reads them with the best installed system voice for each language.
+- **Improve with Claude.** ✦ (⌘I) sends the text and Apple's draft to Claude, which rewrites it to read naturally: idioms, slang, tone. Optional, with your own API key.
+- **History.** The last ten translations are in the menu bar menu: click to copy a translation, ⌥-click to copy the original.
+- **Excluded apps.** Turn ⌘C C off in apps where you copy twice on purpose, such as a terminal or code editor.
+- **Light and dark, English and Russian UI.** The interface follows the system appearance and language.
 
-Кнопка ✦ в попапе (⌘I) улучшает перевод через Claude: оригинал и перевод Apple уходят в Anthropic API, и ответ заменяет перевод. Модель выбирается в настройках: Claude Opus 5.5 (по умолчанию), Sonnet 5.5 или Haiku 4.5. Для Opus и Sonnet запрос идёт с effort `low` и серверным fallback на случай ложного отказа; Haiku 4.5 этих параметров не поддерживает. Кнопка появляется, когда в настройках сохранён API-ключ Anthropic. Ключ хранится в Связке ключей, запросы оплачиваются по тарифам API.
+<p align="center">
+  <img src="docs/images/states.png" alt="Three popups: a dictionary card for a single word, a German idiom improved by Claude, and Japanese text recognized on the screen">
+</p>
 
-В меню иконки есть «История переводов» с последними 10 переводами: клик копирует перевод, клик с ⌥ — оригинал. История хранится только на этом Mac, в настройках приложения, и очищается одним пунктом меню.
+<p align="center">
+  <img src="docs/images/dark.png" alt="Slovo in dark mode translating a French sentence, improved by Claude">
+</p>
 
-В приложениях из списка исключений (например, в терминале или редакторе кода) ⌘C C не открывает перевод. Добавить приложение можно в настройках или прямо из меню иконки: пункт «Отключить в «…»» относится к приложению, которое было активно перед открытием меню.
+## Menu bar and settings
 
-## Сборка и запуск
+Slovo has no Dock icon. Everything else lives behind its menu bar icon: screen translation, the per-app switch for the app you were just in, history and settings.
+
+<p align="center">
+  <img src="docs/images/menu.png" width="645" alt="The menu bar menu with the translation history submenu open">
+</p>
+
+Settings are split into four tabs:
+
+| Tab | What's there |
+| --- | --- |
+| General | Shortcuts for translating the selection (⌘C C by default) and a screen area (⇧⌘2), Open at Login |
+| Languages | Your language, downloaded languages, downloading new ones |
+| Excluded Apps | Apps where ⌘C C does nothing |
+| Claude | Anthropic API key (kept in the Keychain) and the model: Claude Opus 5.5, Sonnet 5.5 or Haiku 4.5 |
+
+<p align="center">
+  <img src="docs/images/settings.png" width="570" alt="The General tab of Slovo's settings with the two shortcuts and Open at Login">
+</p>
+
+## Keyboard
+
+| Where | Keys | Action |
+| --- | --- | --- |
+| Anywhere | ⌘C C | Translate the selection (configurable) |
+| Anywhere | ⇧⌘2 | Translate a screen area (configurable) |
+| Popup | ↩ | Replace the selection with the translation |
+| Popup | ⌘C | Copy the translation |
+| Popup | ⌘I | Improve with Claude |
+| Popup | Esc | Close |
+
+## Requirements
+
+- macOS 26 or later (Apple Translation, Liquid Glass, Vision document recognition)
+- Xcode 26 to build
+- Accessibility permission, for ⌘C C and Replace
+- Screen Recording permission, only for ⇧⌘2; macOS asks the first time
+
+## Build and run
 
 ```bash
 make run
 ```
 
-Скрипт `scripts/build-app.sh` собирает SwiftPM-таргет, упаковывает его в `build/Slovo.app` и подписывает первым найденным сертификатом Apple Development. Другой сертификат можно указать через `CODESIGN_IDENTITY`. Стабильная подпись нужна, чтобы macOS не сбрасывала разрешение «Универсальный доступ» после каждой пересборки.
+`scripts/build-app.sh` builds the SwiftPM target, compiles the Icon Composer icon with `actool`, wraps everything into `build/Slovo.app` and signs it with the first Apple Development certificate it finds (set `CODESIGN_IDENTITY` to pick another). A stable signature matters: with ad-hoc signing macOS forgets the Accessibility permission after every rebuild.
 
-При первом запуске разреши приложению доступ: **Системные настройки → Конфиденциальность и безопасность → Универсальный доступ**. Без этого разрешения глобальный ⌘C C не работает.
+On first launch, allow Slovo in **System Settings → Privacy & Security → Accessibility**.
 
-Чтобы показать попап без горячей клавиши (удобно, когда правишь UI):
+To open the popup without a shortcut, for example while working on the UI:
 
 ```bash
 open build/Slovo.app --args --demo "Some text to translate"
 ```
 
-## Как это работает
+## Privacy
 
-- `DoubleCopyMonitor` следит через глобальный монитор NSEvent за двумя ⌘C подряд с интервалом меньше 0,45 с. Срабатывает по коду клавиши, поэтому работает и в русской раскладке.
-- `SelectionInspector` через Accessibility API выясняет, можно ли редактировать выделенный текст, и где он находится на экране.
-- `LanguageCatalog` берёт языки Apple Translation и оставляет по одному варианту на язык (en → en-US). Варианты скачиваются отдельно, поэтому каждый язык привязан к одному из них.
-- `LanguageDetector` определяет язык через `NLLanguageRecognizer`. Короткий текст с неуверенным результатом («ok») относит к моему языку или языку последнего перевода, если у него та же письменность. Подсказки `languageHints` не годятся: они перебивают даже уверенный результат.
-- `LanguageSettings` хранит мой язык и язык последнего перевода. Последний обновляется после каждого удачного перевода.
-- `PopupModel` вызывает `TranslationSession(installedSource:target:)`. Если языки ещё не скачаны, показывает кнопку «Скачать». Скачивание идёт через `.translationTask`.
-- `PopupController` показывает `NSPanel`, который не активирует приложение. Исходное приложение остаётся активным, поэтому «Заменить» просто вставляет перевод через ⌘V, а затем восстанавливает буфер обмена.
+- Translation, language detection, text recognition, the dictionary and speech all run on the device.
+- Text goes to Anthropic only when you press ✦, and only if you saved an API key. Requests are billed to your Anthropic account.
+- History and settings stay in Slovo's preferences on this Mac; Clear History in the menu wipes the history.
 
-Горячие клавиши в попапе: **↩** заменить, **⌘C** скопировать, **Esc** закрыть, **Пробел** нажимает кнопку × (на ней фокус).
+## How it works
 
-Язык интерфейса выбирается автоматически: русский, если русский стоит первым среди языков системы, иначе английский (`L10n.swift`). Язык можно задать отдельно для приложения: **Системные настройки → Основные → Язык и регион → Приложения**.
+| File | Role |
+| --- | --- |
+| `DoubleCopyMonitor` | Watches for ⌘C pressed twice within 0.45 s, by key code, so it works with any keyboard layout |
+| `GlobalHotKey`, `HotKeySettings`, `KeyCombo` | Recordable system-wide shortcuts registered with the Carbon Event Manager |
+| `SelectionInspector` | Reads the focused element through the Accessibility API: whether it's editable and where the selection is |
+| `LanguageCatalog`, `LanguageDetector` | Apple Translation's languages, one variant per language, and detection with `NLLanguageRecognizer` |
+| `PopupModel`, `PopupView` | Translation with `TranslationSession`, the popup's states and its SwiftUI views |
+| `PopupController` | A non-activating `NSPanel` in an `NSGlassEffectView`, so the source app keeps focus and Replace can paste with ⌘V |
+| `ScreenTextCapture` | `screencapture -i` for the region, then Vision's `RecognizeDocumentsRequest` |
+| `DictionaryLookup`, `Speaker` | Dictionary.app entries and `AVSpeechSynthesizer` |
+| `ClaudeTranslator` | Streams a Messages API request over `URLSession`, with server-side fallback on refusals |
+
