@@ -7,6 +7,9 @@ enum PopupMetrics {
     static let cornerRadius: CGFloat = 26
     static let padding: CGFloat = 14
     static let maxTranslationHeight: CGFloat = 320
+    /// The large card for long texts: a comfortable reading width, most of the screen's height.
+    static let longWidth: CGFloat = 680
+    static let longHeightFraction: CGFloat = 0.78
     /// Transparent room around the card for its drop shadow.
     static let shadowMargin: CGFloat = 32
 }
@@ -15,6 +18,20 @@ struct PopupView: View {
     @Bindable var model: PopupModel
 
     var body: some View {
+        Group {
+            if model.isLong {
+                longBody
+            } else {
+                compactBody
+            }
+        }
+        .translationTask(model.downloadConfiguration) { session in
+            await model.download(using: session)
+        }
+    }
+
+    /// Sized by its content; the controller resizes the panel to match.
+    private var compactBody: some View {
         VStack(alignment: .leading, spacing: 12) {
             header
             if !model.sourceText.isEmpty {
@@ -32,9 +49,34 @@ struct PopupView: View {
         .fixedSize(horizontal: false, vertical: true)
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { model.onHeightChange($0) }
         .frame(maxHeight: .infinity, alignment: .top)
-        .translationTask(model.downloadConfiguration) { session in
-            await model.download(using: session)
+    }
+
+    /// Fills the fixed-size card; the text scrolls between the header and the buttons.
+    private var longBody: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            header
+            Group {
+                switch model.phase {
+                case .loading:
+                    SkeletonLines(width: PopupMetrics.longWidth)
+                case .result:
+                    ChunkList(chunks: model.chunks)
+                        .opacity(model.isRefreshing ? 0.4 : 1)
+                case .needsDownload, .downloading:
+                    downloadPrompt
+                case .failed(let message):
+                    Label(message, systemImage: "exclamationmark.triangle")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxHeight: .infinity, alignment: .top)
+            footer
         }
+        .id(model.session)
+        .padding(PopupMetrics.padding)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private var sourceRow: some View {
@@ -56,6 +98,12 @@ struct PopupView: View {
         HStack(spacing: 8) {
             if let pair = model.pair {
                 LanguageMenu(model: model, pair: pair)
+            }
+            if model.isTranslatingChunks, model.phase == .result {
+                ProgressView(value: Double(model.translatedChunkCount), total: Double(model.chunks.count))
+                    .progressViewStyle(.circular)
+                    .controlSize(.small)
+                    .accessibilityLabel(L10n.translating)
             }
             Spacer(minLength: 0)
             Button(action: model.onClose) {
@@ -159,7 +207,7 @@ struct PopupView: View {
         switch model.phase {
         case .loading, .result:
             HStack(spacing: 8) {
-                if AISettings.shared.isConfigured {
+                if AISettings.shared.isConfigured, !model.isLong {
                     improveButton
                 }
                 // Text from the screen has nothing to paste over, so there's no Replace to explain.
@@ -203,7 +251,7 @@ struct PopupView: View {
             }
             .font(.system(size: 13, weight: .semibold))
             .controlSize(.large)
-            .disabled(model.phase == .loading || model.isRefreshing || model.improvement == .working)
+            .disabled(model.phase == .loading || model.isRefreshing || model.improvement == .working || model.isTranslatingChunks)
 
         case .needsDownload, .downloading:
             HStack(spacing: 8) {
@@ -467,9 +515,35 @@ private struct TranslationText: View {
     }
 }
 
+/// A long text, piece by piece: each translation replaces its dimmed original as it arrives.
+private struct ChunkList: View {
+    let chunks: [PopupModel.Chunk]
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 10) {
+                ForEach(chunks) { chunk in
+                    Text(chunk.translation ?? chunk.source)
+                        .font(.system(size: 15))
+                        .lineSpacing(3)
+                        .foregroundStyle(chunk.translation == nil ? .tertiary : .primary)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .padding(.horizontal, 2)
+        }
+        .scrollBounceBehavior(.basedOnSize)
+    }
+}
+
 private struct SkeletonLines: View {
     @State private var dimmed = false
-    private let lineWidth = PopupMetrics.width - PopupMetrics.padding * 2 - 4
+    private let lineWidth: CGFloat
+
+    init(width: CGFloat = PopupMetrics.width) {
+        lineWidth = width - PopupMetrics.padding * 2 - 4
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {

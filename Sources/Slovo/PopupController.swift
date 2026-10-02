@@ -68,6 +68,8 @@ final class PopupController: NSObject, NSWindowDelegate {
     private var anchor = Anchor.top(0)
     private var originX: CGFloat = 0
     private var height = estimatedHeight
+    /// Set for a long text: the large card keeps this size, whatever its content.
+    private var fixedSize: CGSize?
     private var mouseMonitor: Any?
     private var closeTask: Task<Void, Never>?
     private var revealTask: Task<Void, Never>?
@@ -119,9 +121,14 @@ final class PopupController: NSObject, NSWindowDelegate {
     }
 
     private func present(for context: SelectionContext) {
-        switch context.source {
-        case .selection: position(near: context.selectionRect)
-        case .screen: positionInMiddleOfScreen()
+        fixedSize = nil
+        if model.isLong {
+            positionLongTextCard()
+        } else {
+            switch context.source {
+            case .selection: position(near: context.selectionRect)
+            case .screen: positionInMiddleOfScreen()
+            }
         }
         panel.alphaValue = 0
         panel.orderFrontRegardless()
@@ -213,7 +220,23 @@ final class PopupController: NSObject, NSWindowDelegate {
         applyFrame()
     }
 
+    /// A long text gets a large card in the middle of the screen, sized for reading; the text scrolls inside.
+    private func positionLongTextCard() {
+        let mouse = NSEvent.mouseLocation
+        let screen = NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main
+        guard let visible = screen?.visibleFrame else { return }
+        let size = CGSize(
+            width: min(PopupMetrics.longWidth, visible.width - 80),
+            height: (visible.height * PopupMetrics.longHeightFraction).rounded()
+        )
+        fixedSize = size
+        anchor = .middle(visible.midY)
+        originX = (visible.midX - size.width / 2).rounded()
+        applyFrame()
+    }
+
     private func resize(to newHeight: CGFloat) {
+        guard fixedSize == nil else { return }
         let rounded = ceil(newHeight)
         guard rounded > 0, rounded != height else { return }
         height = rounded
@@ -222,13 +245,14 @@ final class PopupController: NSObject, NSWindowDelegate {
     }
 
     private func targetFrame() -> NSRect {
+        let size = fixedSize ?? CGSize(width: PopupMetrics.width, height: height)
         let y: CGFloat
         switch anchor {
-        case .top(let top): y = top - height
+        case .top(let top): y = top - size.height
         case .bottom(let bottom): y = bottom
-        case .middle(let middle): y = middle - height / 2
+        case .middle(let middle): y = middle - size.height / 2
         }
-        let card = NSRect(x: originX, y: y, width: PopupMetrics.width, height: height)
+        let card = NSRect(origin: CGPoint(x: originX, y: y), size: size)
         let margin = PopupMetrics.shadowMargin
         return card.insetBy(dx: -margin, dy: -margin)
     }

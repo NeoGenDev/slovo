@@ -20,6 +20,7 @@ Translation runs on your Mac with Apple Translation: no account, no network, not
 - **⌘C C anywhere.** Copy as usual, press ⌘C once more, and the translation appears under the selection. Prefer one shortcut? Record your own in Settings.
 - **Replace in place.** ↩ pastes the translation over the selection, then puts your clipboard back as it was. Read-only text gets Copy instead.
 - **Automatic languages.** Slovo detects the language of the text. Anything foreign is translated into your language; text in your language goes back into the language you last translated from, so a reply lands in the language of the conversation. The language pill in the popup switches either side for a one-off.
+- **Long texts.** From about a thousand characters, for example a whole page copied with ⌘A, the translation opens in a large card in the middle of the screen. The text is translated paragraph by paragraph, and each paragraph replaces its dimmed original as soon as it's ready.
 - **Screen text.** ⇧⌘2 opens the system region picker. Text in the area is recognized on-device with Vision, wrapped lines are rebuilt into paragraphs, and the result opens in the same popup. Works on images, videos and anything you can't select.
 - **Single words.** One word gets a card from Dictionary.app: pronunciation when the dictionary has it, the start of the entry and a link to the full one.
 - **Read aloud.** 🔊 next to the original and the translation reads them with the best installed system voice for each language.
@@ -121,6 +122,7 @@ open build/Slovo.app --args --demo "Some text to translate"
 | `LanguageCatalog`, `LanguageDetector` | Apple Translation's languages, one variant per language, and detection with `NLLanguageRecognizer` |
 | `PopupModel`, `PopupView` | Translation with `TranslationSession`, the popup's states and its SwiftUI views |
 | `PopupController` | A non-activating `NSPanel` in an `NSGlassEffectView`, so the source app keeps focus and Replace can paste with ⌘V |
+| `TextChunker` | Splits long texts into paragraphs and sentence groups for `TranslationSession`'s batch translation |
 | `ScreenTextCapture` | `screencapture -i` for the region, then Vision's `RecognizeDocumentsRequest` |
 | `DictionaryLookup`, `Speaker` | Dictionary.app entries and `AVSpeechSynthesizer` |
 | `AITranslator`, `ClaudeTranslator`, `OpenAICompatibleTranslator` | One prompt for every provider; Claude's Messages API with server-side fallback on refusals, or streamed chat completions plus the server's model list |

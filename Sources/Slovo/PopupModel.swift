@@ -19,6 +19,18 @@ final class PopupModel {
         case failed(String)
     }
 
+    /// A piece of a long text, translated on its own.
+    struct Chunk: Identifiable {
+        let id: Int
+        let source: String
+        /// The whitespace that followed it in the original.
+        let separator: String
+        var translation: String?
+    }
+
+    /// From this length the popup becomes a large reading card that translates the text piece by piece.
+    static let longTextThreshold = 1024
+
     enum Phase: Equatable {
         case loading
         case result
@@ -40,6 +52,10 @@ final class PopupModel {
     private(set) var improvement = Improvement.idle
     /// Who rewrote the translation, for the "Improved by …" caption.
     private(set) var improvedBy = ""
+    /// A long text: shown in the large card as `chunks`, translated piece by piece.
+    private(set) var isLong = false
+    private(set) var chunks: [Chunk] = []
+    private(set) var translatedChunkCount = 0
     private(set) var isEditable = true
     private(set) var textSource = TextSource.selection
     var justCopied = false
@@ -64,7 +80,14 @@ final class PopupModel {
 
     func start(text: String, isEditable: Bool, source: TextSource) {
         reset(text: text, isEditable: isEditable, source: source)
-        dictionaryEntry = DictionaryLookup.entry(for: text)
+        isLong = text.count >= Self.longTextThreshold
+        if isLong {
+            chunks = TextChunker.pieces(of: text).enumerated().map { index, piece in
+                Chunk(id: index, source: piece.text, separator: piece.separator)
+            }
+        } else {
+            dictionaryEntry = DictionaryLookup.entry(for: text)
+        }
         phase = .loading
 
         task = Task {
@@ -93,6 +116,9 @@ final class PopupModel {
         translation = ""
         pair = nil
         dictionaryEntry = nil
+        isLong = false
+        chunks = []
+        translatedChunkCount = 0
         isRefreshing = false
         improvement = .idle
         justCopied = false
@@ -139,7 +165,11 @@ final class PopupModel {
     }
 
     var canImprove: Bool {
-        phase == .result && !isRefreshing && improvement != .working && improvement != .done
+        !isLong && phase == .result && !isRefreshing && improvement != .working && improvement != .done
+    }
+
+    var isTranslatingChunks: Bool {
+        isLong && translatedChunkCount < chunks.count
     }
 
     /// Sends the text and Apple's draft to the AI provider; Apple's translation stays (dimmed) until the result is in.
@@ -184,6 +214,12 @@ final class PopupModel {
         nonisolated(unsafe) let session = session
         do {
             try await session.prepareTranslation()
+            // A long text is translated by the model's own task, which closing the popup cancels.
+            if isLong, let pair {
+                downloadConfiguration = nil
+                task = Task { await translate(pair) }
+                return
+            }
             let response = try await session.translate(sourceText)
             if let pair { didTranslate(pair, into: response.targetText) }
             animated {
@@ -205,6 +241,10 @@ final class PopupModel {
         switch status {
         case .installed:
             let session = TranslationSession(installedSource: source, target: target)
+            if isLong {
+                await translateChunks(with: session, pair: pair)
+                return
+            }
             do {
                 let response = try await session.translate(sourceText)
                 guard !Task.isCancelled else { return }
@@ -228,6 +268,52 @@ final class PopupModel {
         @unknown default:
             fail(L10n.translationUnavailable)
         }
+    }
+
+    /// All pieces go in one batch; each translation replaces its original as soon as it's ready,
+    /// so the beginning can be read while the rest is still translating.
+    private func translateChunks(with session: TranslationSession, pair: LanguagePair) async {
+        // The SDK isn't Sendable-annotated; the session is only used from here and to cancel it.
+        nonisolated(unsafe) let session = session
+        animated {
+            for index in chunks.indices { chunks[index].translation = nil }
+            translatedChunkCount = 0
+            translation = ""
+            isRefreshing = false
+            phase = .result
+        }
+        let requests = chunks.map { TranslationSession.Request(sourceText: $0.source, clientIdentifier: String($0.id)) }
+        await withTaskCancellationHandler {
+            do {
+                for try await response in session.translate(batch: requests) {
+                    guard !Task.isCancelled else { return }
+                    if let id = response.clientIdentifier.flatMap(Int.init) {
+                        setTranslation(response.targetText, ofChunk: id)
+                    }
+                }
+            } catch {
+                guard !Task.isCancelled else { return }
+            }
+            // A batch stops at the first piece it can't translate. The rest go one by one,
+            // and a piece that fails on its own stays in the original language.
+            for chunk in chunks where chunk.translation == nil {
+                let text = (try? await session.translate(chunk.source))?.targetText ?? chunk.source
+                guard !Task.isCancelled else { return }
+                setTranslation(text, ofChunk: chunk.id)
+            }
+        } onCancel: {
+            session.cancel()
+        }
+        guard !Task.isCancelled else { return }
+        translation = chunks.map { ($0.translation ?? $0.source) + $0.separator }.joined()
+        // Remembered for the language choice, but not kept in History: the menu is for short texts.
+        settings.remember(pair)
+    }
+
+    private func setTranslation(_ text: String, ofChunk id: Int) {
+        guard chunks.indices.contains(id), chunks[id].translation == nil else { return }
+        chunks[id].translation = text
+        translatedChunkCount += 1
     }
 
     private func didTranslate(_ pair: LanguagePair, into translation: String) {
