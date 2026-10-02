@@ -74,6 +74,8 @@ final class PopupController: NSObject, NSWindowDelegate {
     private var closeTask: Task<Void, Never>?
     private var revealTask: Task<Void, Never>?
     private var generation = 0
+    /// Set while the user drags the popup by its header, until the next programmatic frame change.
+    private var isUserMoving = false
 
     override init() {
         super.init()
@@ -82,6 +84,7 @@ final class PopupController: NSObject, NSWindowDelegate {
         model.onClose = { [weak self] in self?.close() }
         model.onHeightChange = { [weak self] height in self?.resize(to: height) }
         model.onPhaseChange = { [weak self] phase in self?.phaseChanged(phase) }
+        model.onWindowDrag = { [weak self] in self?.userStartedMoving() }
     }
 
     /// Orders the panel in fully transparent and reveals it once the translation is ready,
@@ -131,7 +134,9 @@ final class PopupController: NSObject, NSWindowDelegate {
 
     private func present(for context: SelectionContext) {
         fixedSize = nil
-        if model.isLong {
+        if model.isPinned {
+            positionWherePinned()
+        } else if model.isLong {
             positionLongTextCard()
         } else {
             switch context.source {
@@ -146,6 +151,7 @@ final class PopupController: NSObject, NSWindowDelegate {
     }
 
     func close(animated: Bool = true) {
+        model.isPinned = false
         closeTask?.cancel()
         revealTask?.cancel()
         model.cancel()
@@ -171,16 +177,36 @@ final class PopupController: NSObject, NSWindowDelegate {
         }
     }
 
+    /// ⇧⌘2: the popup mustn't end up in the picture. A pinned one only steps aside and keeps its content.
+    func hideForScreenCapture() {
+        guard model.isPinned else {
+            close(animated: false)
+            return
+        }
+        panel.orderOut(nil)
+    }
+
+    /// The screen capture was cancelled: a pinned popup comes back as it was.
+    func showAgainIfPinned() {
+        guard model.isPinned, model.isRevealed, !panel.isVisible else { return }
+        panel.orderFrontRegardless()
+    }
+
     // MARK: Actions
 
     private func copy() {
         guard !model.translation.isEmpty else { return }
         Pasteboard.setString(model.translation)
         model.animated { model.justCopied = true }
+        let isPinned = model.isPinned
         closeTask = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(700))
-            guard !Task.isCancelled else { return }
-            self?.close()
+            try? await Task.sleep(for: .milliseconds(isPinned ? 1200 : 700))
+            guard !Task.isCancelled, let self else { return }
+            if isPinned {
+                self.model.animated { self.model.justCopied = false }
+            } else {
+                self.close()
+            }
         }
     }
 
@@ -188,9 +214,22 @@ final class PopupController: NSObject, NSWindowDelegate {
         guard context.isEditable, !model.translation.isEmpty else { return }
         let text = whitespace.leading + model.translation + whitespace.trailing
         let app = context.app
-        // Hide immediately so keyboard focus is back in the source app before ⌘V is posted.
-        close(animated: false)
-        Task { await TextReplacer.replaceSelection(with: text, in: app) }
+        guard model.isPinned else {
+            // Hide immediately so keyboard focus is back in the source app before ⌘V is posted.
+            close(animated: false)
+            Task { await TextReplacer.replaceSelection(with: text, in: app) }
+            return
+        }
+        // Pinned: step aside while ⌘V goes to the source app, then come back without taking the
+        // keyboard from it. A writing popup comes back empty, ready for the next message.
+        panel.orderOut(nil)
+        let pastingGeneration = generation
+        Task {
+            await TextReplacer.replaceSelection(with: text, in: app)
+            guard generation == pastingGeneration, model.isPinned else { return }
+            model.clearDraft()
+            panel.orderFrontRegardless()
+        }
     }
 
     // MARK: Layout
@@ -234,13 +273,30 @@ final class PopupController: NSObject, NSWindowDelegate {
         let mouse = NSEvent.mouseLocation
         let screen = NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main
         guard let visible = screen?.visibleFrame else { return }
-        let size = CGSize(
-            width: min(PopupMetrics.longWidth, visible.width - 80),
-            height: (visible.height * PopupMetrics.longHeightFraction).rounded()
-        )
+        let size = Self.longCardSize(in: visible)
         fixedSize = size
         anchor = .middle(visible.midY)
         originX = (visible.midX - size.width / 2).rounded()
+        applyFrame()
+    }
+
+    private static func longCardSize(in visible: CGRect) -> CGSize {
+        CGSize(
+            width: min(PopupMetrics.longWidth, visible.width - 80),
+            height: (visible.height * PopupMetrics.longHeightFraction).rounded()
+        )
+    }
+
+    /// A pinned popup keeps its top-left corner; the new content grows down from there, kept on screen.
+    private func positionWherePinned() {
+        let margin = PopupMetrics.shadowMargin
+        let card = panel.frame.insetBy(dx: margin, dy: margin)
+        let screen = NSScreen.screens.first { $0.frame.intersects(card) } ?? NSScreen.main
+        guard let visible = screen?.visibleFrame else { return }
+        if model.isLong { fixedSize = Self.longCardSize(in: visible) }
+        let width = fixedSize?.width ?? PopupMetrics.width
+        anchor = .top(min(card.maxY, visible.maxY - Self.gap))
+        originX = min(max(card.minX, visible.minX + Self.gap), visible.maxX - width - Self.gap)
         applyFrame()
     }
 
@@ -275,6 +331,7 @@ final class PopupController: NSObject, NSWindowDelegate {
     /// `setFrame` doesn't stop a reveal or resize animation still running from the previous popup,
     /// which then dragged the window back to its own frame.
     private func setPanelFrame(_ frame: NSRect, duration: TimeInterval = 0, timing: CAMediaTimingFunctionName = .easeOut) {
+        isUserMoving = false
         NSAnimationContext.runAnimationGroup { animation in
             animation.duration = duration
             animation.timingFunction = CAMediaTimingFunction(name: timing)
@@ -333,6 +390,8 @@ final class PopupController: NSObject, NSWindowDelegate {
         let frame = targetFrame()
         let slide: CGFloat
         switch anchor {
+        // A pinned popup appears in place.
+        case _ where model.isPinned: slide = 0
         case .top, .middle: slide = Self.revealSlide
         case .bottom: slide = -Self.revealSlide
         }
@@ -347,6 +406,22 @@ final class PopupController: NSObject, NSWindowDelegate {
         } completionHandler: { [weak self] in
             MainActor.assumeIsolated { self?.syncContentSize() }
         }
+    }
+
+    // MARK: Moving
+
+    /// Dragging the header pins the popup: it was put somewhere on purpose.
+    private func userStartedMoving() {
+        isUserMoving = true
+        if !model.isPinned { model.animated { model.isPinned = true } }
+    }
+
+    func windowDidMove(_ notification: Notification) {
+        guard isUserMoving else { return }
+        // Later resizes and new content keep the place the popup was dragged to.
+        let card = panel.frame.insetBy(dx: PopupMetrics.shadowMargin, dy: PopupMetrics.shadowMargin)
+        anchor = .top(card.maxY)
+        originX = card.minX
     }
 
     // MARK: Dismissal
@@ -370,7 +445,7 @@ final class PopupController: NSObject, NSWindowDelegate {
 
     private func dismissUnlessDownloading() {
         // The system download prompt takes focus; closing then would cancel the download.
-        guard model.phase != .downloading else { return }
+        guard !model.isPinned, model.phase != .downloading else { return }
         close()
     }
 

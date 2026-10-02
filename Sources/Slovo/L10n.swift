@@ -117,6 +117,8 @@ nonisolated enum L10n {
 
     // Popup
     static let close = pick("Закрыть", "Close")
+    static let pin = pick("Закрепить (⌘P)", "Pin (⌘P)")
+    static let unpin = pick("Открепить (⌘P)", "Unpin (⌘P)")
     static func improveWith(_ name: String) -> String {
         pick("Улучшить через \(name) (⌘I)", "Improve with \(name) (⌘I)")
     }

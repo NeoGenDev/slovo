@@ -21,6 +21,7 @@ Translation runs on your Mac with Apple Translation: no account, no network, not
 - **Replace in place.** ↩ pastes the translation over the selection, then puts your clipboard back as it was. Read-only text gets Copy instead.
 - **Automatic languages.** Slovo detects the language of the text. Anything foreign is translated into your language; text in your language goes back into the language you last translated from, so a reply lands in the language of the conversation. The language pill in the popup switches either side for a one-off.
 - **Write in your language.** ⇧⌘1 opens an empty popup under the caret. Type in your own language, the translation follows as you type, and ↩ inserts it into the field you were typing in. By default it goes into the language of the conversation, the one you last translated from.
+- **Pin the popup.** The pin (⌘P) keeps the popup open when you click elsewhere, and the next translations open in it; drag it by the header to put it aside. Replace and Insert leave it open, so it works as a small translation window next to a chat.
 - **Long texts.** From about a thousand characters, for example a whole page copied with ⌘A, the translation opens in a large card in the middle of the screen. The text is translated paragraph by paragraph, and each paragraph replaces its dimmed original as soon as it's ready.
 - **Screen text.** ⇧⌘2 opens the system region picker. Text in the area is recognized on-device with Vision, wrapped lines are rebuilt into paragraphs, and the result opens in the same popup. Works on images, videos and anything you can't select.
 - **Single words.** One word gets a card from Dictionary.app: pronunciation when the dictionary has it, the start of the entry and a link to the full one.
@@ -69,6 +70,7 @@ Settings are split into four tabs:
 | Popup | ↩ | Replace the selection with the translation |
 | Popup | ⌘C | Copy the translation |
 | Popup | ⌘I | Improve with AI |
+| Popup | ⌘P | Pin or unpin |
 | Popup | Esc | Close |
 | Writing | ↩ | Insert the translation where you were typing |
 | Writing | ⌥↩ | New line |

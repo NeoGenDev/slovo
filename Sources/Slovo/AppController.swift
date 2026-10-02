@@ -143,7 +143,7 @@ final class AppController {
         guard !isCapturingScreen else { return }
         isCapturingScreen = true
         // An open popup would otherwise end up in the picture.
-        popup.close(animated: false)
+        popup.hideForScreenCapture()
         Task {
             defer { isCapturingScreen = false }
             switch await ScreenTextCapture.run() {
@@ -152,7 +152,7 @@ final class AppController {
             case .noText:
                 popup.showFailure(L10n.noTextFound)
             case .cancelled, .needsPermission:
-                break
+                popup.showAgainIfPinned()
             }
         }
     }

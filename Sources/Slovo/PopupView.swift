@@ -108,6 +108,22 @@ struct PopupView: View {
                     .accessibilityLabel(L10n.translating)
             }
             Spacer(minLength: 0)
+            Button {
+                model.animated { model.isPinned.toggle() }
+            } label: {
+                Image(systemName: model.isPinned ? "pin.fill" : "pin")
+                    .font(.system(size: 11, weight: .semibold))
+                    .frame(width: 14, height: 14)
+                    .contentTransition(.symbolEffect(.replace))
+            }
+            .buttonStyle(.glass)
+            .buttonBorderShape(.circle)
+            .foregroundStyle(model.isPinned ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
+            // Keyboard focus stays on the close button, so Space still closes the popup.
+            .focusable(false)
+            .keyboardShortcut("p", modifiers: .command)
+            .help(model.isPinned ? L10n.unpin : L10n.pin)
+            .accessibilityLabel(model.isPinned ? L10n.unpin : L10n.pin)
             Button(action: model.onClose) {
                 Image(systemName: "xmark")
                     .font(.system(size: 11, weight: .semibold))
@@ -120,6 +136,9 @@ struct PopupView: View {
             .keyboardShortcut(.cancelAction)
             .accessibilityLabel(L10n.close)
         }
+        // The header's empty space moves the popup.
+        .contentShape(.rect)
+        .gesture(WindowDragGesture().onChanged { _ in model.onWindowDrag() })
     }
 
     @ViewBuilder

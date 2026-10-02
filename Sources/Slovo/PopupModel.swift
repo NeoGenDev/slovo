@@ -66,6 +66,9 @@ final class PopupModel {
     private(set) var isEditable = true
     private(set) var textSource = TextSource.selection
     var justCopied = false
+    /// A pinned popup stays open when focus moves elsewhere, and the next translations open in it.
+    /// Only closing it unpins.
+    var isPinned = false
     /// Bumped for every new popup. The view uses it as its identity, so each popup starts from fresh
     /// views instead of transitioning from the previous one's (e.g. the ✓ morphing back into the copy icon).
     private(set) var session = 0
@@ -79,6 +82,8 @@ final class PopupModel {
     @ObservationIgnored var onClose: () -> Void = {}
     @ObservationIgnored var onHeightChange: (CGFloat) -> Void = { _ in }
     @ObservationIgnored var onPhaseChange: (Phase) -> Void = { _ in }
+    /// The header is being dragged: the popup moves with the pointer and stays where it's put.
+    @ObservationIgnored var onWindowDrag: () -> Void = {}
 
     @ObservationIgnored private let catalog = LanguageCatalog.shared
     @ObservationIgnored private let settings = LanguageSettings.shared
@@ -289,6 +294,14 @@ final class PopupModel {
         } else {
             onCopy()
         }
+        // A pinned popup stays open for the next message.
+        isSubmitting = false
+    }
+
+    /// After inserting into a pinned popup: an empty field for the next message.
+    func clearDraft() {
+        guard isComposing else { return }
+        draft = ""
     }
 
     func requestDownload() {
