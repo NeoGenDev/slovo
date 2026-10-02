@@ -10,6 +10,10 @@ struct CCTranslatorApp: App {
         } label: {
             Image(systemName: appDelegate.controller.isTrusted ? "translate" : "exclamationmark.triangle")
         }
+
+        Settings {
+            SettingsView(settings: .shared, controller: appDelegate.controller, catalog: .shared)
+        }
     }
 }
 
@@ -23,6 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 private struct MenuContent: View {
     @Bindable var controller: AppController
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         if controller.isTrusted {
@@ -33,7 +38,12 @@ private struct MenuContent: View {
             }
         }
         Divider()
-        Toggle(L10n.openAtLogin, isOn: $controller.launchAtLogin)
+        Button(L10n.settings) {
+            // A menu bar app isn't active by default, so the window would open behind others.
+            NSApp.activate()
+            openSettings()
+        }
+        .keyboardShortcut(",")
         Divider()
         Button(L10n.quit) {
             NSApp.terminate(nil)

@@ -126,7 +126,7 @@ final class PopupController: NSObject, NSWindowDelegate {
     private func copy() {
         guard !model.translation.isEmpty else { return }
         Pasteboard.setString(model.translation)
-        model.justCopied = true
+        model.animated { model.justCopied = true }
         closeTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(700))
             guard !Task.isCancelled else { return }
@@ -220,6 +220,10 @@ final class PopupController: NSObject, NSWindowDelegate {
 
     private func reveal() {
         guard !model.isRevealed, panel.isVisible else { return }
+        // Flush pending SwiftUI updates and draw while still transparent, so the first visible
+        // frame is the new content, not a stale one left from the previous popup.
+        panel.contentView?.layoutSubtreeIfNeeded()
+        panel.displayIfNeeded()
         model.isRevealed = true
 
         // Slide in from the selection: down when the popup sits below it, up when above.

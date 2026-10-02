@@ -1,33 +1,12 @@
 import Foundation
 import Observation
+import SwiftUI
 import Translation
 
-enum Direction: Equatable {
-    case englishToRussian
-    case russianToEnglish
-
-    /// Counts Cyrillic vs Latin letters; nil when the text has neither.
-    static func detect(in text: String) -> Direction? {
-        var cyrillic = 0
-        var latin = 0
-        for scalar in text.unicodeScalars {
-            switch scalar.value {
-            case 0x0400...0x04FF: cyrillic += 1
-            case 0x41...0x5A, 0x61...0x7A: latin += 1
-            default: break
-            }
-        }
-        guard cyrillic + latin > 0 else { return nil }
-        return cyrillic > latin ? .russianToEnglish : .englishToRussian
-    }
-
-    var source: Locale.Language { self == .englishToRussian ? Self.english : Self.russian }
-    var target: Locale.Language { self == .englishToRussian ? Self.russian : Self.english }
-    var sourceName: String { self == .englishToRussian ? L10n.english : L10n.russian }
-    var targetName: String { self == .englishToRussian ? L10n.russian : L10n.english }
-
-    private static let english = Locale.Language(identifier: "en")
-    private static let russian = Locale.Language(identifier: "ru")
+/// Source and target as `LanguageCatalog` keys.
+struct LanguagePair: Equatable {
+    var source: String
+    var target: String
 }
 
 @Observable
@@ -43,11 +22,16 @@ final class PopupModel {
     private(set) var phase: Phase = .loading {
         didSet { onPhaseChange(phase) }
     }
-    private(set) var source = ""
+    private(set) var sourceText = ""
     private(set) var translation = ""
-    private(set) var direction: Direction?
+    private(set) var pair: LanguagePair?
+    /// Re-translating after a language change: the previous result stays visible, dimmed.
+    private(set) var isRefreshing = false
     private(set) var isEditable = true
     var justCopied = false
+    /// Bumped for every new popup. The view uses it as its identity, so each popup starts from fresh
+    /// views instead of transitioning from the previous one's (e.g. the ✓ morphing back into the copy icon).
+    private(set) var session = 0
     /// Set by the controller once the panel is visible; content changes before that shouldn't animate.
     var isRevealed = false
     /// Non-nil while a language download is requested; drives `.translationTask` in the view.
@@ -59,23 +43,62 @@ final class PopupModel {
     @ObservationIgnored var onHeightChange: (CGFloat) -> Void = { _ in }
     @ObservationIgnored var onPhaseChange: (Phase) -> Void = { _ in }
 
+    @ObservationIgnored private let catalog = LanguageCatalog.shared
+    @ObservationIgnored private let settings = LanguageSettings.shared
     @ObservationIgnored private var task: Task<Void, Never>?
 
     func start(text: String, isEditable: Bool) {
         cancel()
-        source = text
+        sourceText = text
         translation = ""
+        pair = nil
+        isRefreshing = false
         justCopied = false
         downloadConfiguration = nil
         self.isEditable = isEditable
-        direction = Direction.detect(in: text)
-
-        guard let direction else {
-            phase = .failed(L10n.onlyRussianAndEnglish)
-            return
-        }
         phase = .loading
-        task = Task { await translateWithInstalledLanguages(text, direction) }
+        session += 1
+
+        task = Task {
+            await catalog.load()
+            guard !Task.isCancelled else { return }
+            let preferred = [settings.primary, settings.lastForeign]
+            guard let source = LanguageDetector.detect(text, candidates: catalog.keys, preferred: preferred) else {
+                fail(L10n.couldNotDetectLanguage)
+                return
+            }
+            let pair = LanguagePair(source: source, target: settings.target(forSource: source))
+            self.pair = pair
+            await translate(pair)
+        }
+    }
+
+    /// Translates the same text again with a language picked in the popup's menu.
+    func retranslate(source: String? = nil, target: String? = nil) {
+        guard var pair = self.pair else { return }
+        if let source { pair.source = source }
+        if let target { pair.target = target }
+        guard pair != self.pair, pair.source != pair.target else { return }
+
+        cancel()
+        downloadConfiguration = nil
+        animated {
+            self.pair = pair
+            justCopied = false
+            if phase == .result {
+                isRefreshing = true
+            } else {
+                phase = .loading
+            }
+        }
+        task = Task { await translate(pair) }
+    }
+
+    /// Animates content changes only while the popup is on screen. SwiftUI may apply a change made
+    /// while the panel is still transparent only after it appears, so the animation is bound to the
+    /// change itself (`withAnimation`), not to the value, and resets never animate.
+    func animated(_ changes: () -> Void) {
+        withAnimation(isRevealed ? .smooth(duration: 0.2) : nil, changes)
     }
 
     func cancel() {
@@ -84,9 +107,12 @@ final class PopupModel {
     }
 
     func requestDownload() {
-        guard let direction else { return }
-        phase = .downloading
-        downloadConfiguration = TranslationSession.Configuration(source: direction.source, target: direction.target)
+        guard let pair else { return }
+        animated { phase = .downloading }
+        downloadConfiguration = TranslationSession.Configuration(
+            source: catalog.variant(for: pair.source),
+            target: catalog.variant(for: pair.target)
+        )
     }
 
     /// Runs inside `.translationTask` — the only kind of session allowed to ask the system to download languages.
@@ -95,37 +121,56 @@ final class PopupModel {
         nonisolated(unsafe) let session = session
         do {
             try await session.prepareTranslation()
-            let response = try await session.translate(source)
-            translation = response.targetText
-            phase = .result
+            let response = try await session.translate(sourceText)
+            if let pair { settings.remember(pair) }
+            animated {
+                translation = response.targetText
+                phase = .result
+            }
         } catch {
-            phase = .failed(L10n.languagesNotDownloaded)
+            fail(L10n.languagesNotDownloaded)
         }
         downloadConfiguration = nil
     }
 
-    private func translateWithInstalledLanguages(_ text: String, _ direction: Direction) async {
-        let status = await LanguageAvailability().status(from: direction.source, to: direction.target)
+    private func translate(_ pair: LanguagePair) async {
+        let source = catalog.variant(for: pair.source)
+        let target = catalog.variant(for: pair.target)
+        let status = await LanguageAvailability().status(from: source, to: target)
         guard !Task.isCancelled else { return }
 
         switch status {
         case .installed:
-            let session = TranslationSession(installedSource: direction.source, target: direction.target)
+            let session = TranslationSession(installedSource: source, target: target)
             do {
-                let response = try await session.translate(text)
+                let response = try await session.translate(sourceText)
                 guard !Task.isCancelled else { return }
-                translation = response.targetText
-                phase = .result
+                settings.remember(pair)
+                animated {
+                    translation = response.targetText
+                    isRefreshing = false
+                    phase = .result
+                }
             } catch {
                 guard !Task.isCancelled else { return }
-                phase = .failed(L10n.translationFailed(error.localizedDescription))
+                fail(L10n.translationFailed(error.localizedDescription))
             }
         case .supported:
-            phase = .needsDownload
+            animated {
+                isRefreshing = false
+                phase = .needsDownload
+            }
         case .unsupported:
-            phase = .failed(L10n.directionUnsupported)
+            fail(L10n.directionUnsupported)
         @unknown default:
-            phase = .failed(L10n.translationUnavailable)
+            fail(L10n.translationUnavailable)
+        }
+    }
+
+    private func fail(_ message: String) {
+        animated {
+            isRefreshing = false
+            phase = .failed(message)
         }
     }
 }

@@ -18,6 +18,12 @@ final class AppController {
     func start() {
         hotkey.onTrigger = { [weak self] in self?.handleDoubleCopy() }
 
+        // Load the language list up front so the first popup doesn't wait for it.
+        Task {
+            await LanguageCatalog.shared.load()
+            LanguageSettings.shared.adopt(supported: LanguageCatalog.shared.keys)
+        }
+
         // Dev shortcut: `open "build/CC Translator.app" --args --demo "Some text"` shows the popup at the pointer.
         let arguments = CommandLine.arguments
         if let index = arguments.firstIndex(of: "--demo"), arguments.indices.contains(index + 1) {

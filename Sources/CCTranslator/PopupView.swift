@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import Translation
 
@@ -16,7 +17,7 @@ struct PopupView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             header
-            Text(model.source)
+            Text(model.sourceText)
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
@@ -24,13 +25,12 @@ struct PopupView: View {
             content
             footer
         }
+        .id(model.session)
         .padding(PopupMetrics.padding)
         .frame(width: PopupMetrics.width, alignment: .leading)
         .fixedSize(horizontal: false, vertical: true)
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { model.onHeightChange($0) }
         .frame(maxHeight: .infinity, alignment: .top)
-        .animation(model.isRevealed ? .smooth(duration: 0.2) : nil, value: model.phase)
-        .animation(.smooth(duration: 0.2), value: model.justCopied)
         .translationTask(model.downloadConfiguration) { session in
             await model.download(using: session)
         }
@@ -38,20 +38,8 @@ struct PopupView: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            if let direction = model.direction {
-                HStack(spacing: 6) {
-                    Text(direction.sourceName)
-                        .foregroundStyle(.secondary)
-                    Image(systemName: "arrow.right")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(.secondary)
-                    Text(direction.targetName)
-                }
-                .font(.system(size: 12, weight: .semibold))
-                .padding(.horizontal, 12)
-                .frame(height: 28)
-                .glassEffect(.regular, in: .capsule)
-                .accessibilityElement(children: .combine)
+            if let pair = model.pair {
+                LanguageMenu(model: model, pair: pair)
             }
             Spacer(minLength: 0)
             Button(action: model.onClose) {
@@ -75,6 +63,7 @@ struct PopupView: View {
             SkeletonLines()
         case .result:
             TranslationText(text: model.translation)
+                .opacity(model.isRefreshing ? 0.4 : 1)
         case .needsDownload, .downloading:
             downloadPrompt
         case .failed(let message):
@@ -82,6 +71,13 @@ struct PopupView: View {
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var copyTitle: some View {
+        HStack(spacing: 6) {
+            Text(L10n.copy)
+            Text("⌘C").fontWeight(.medium).opacity(0.55)
         }
     }
 
@@ -117,11 +113,18 @@ struct PopupView: View {
                 Spacer(minLength: 0)
                 Button(action: model.onCopy) {
                     HStack(spacing: 6) {
-                        Image(systemName: model.justCopied ? "checkmark" : "doc.on.doc")
+                        ButtonIcon(name: model.justCopied ? "checkmark" : "doc.on.doc")
                             .contentTransition(.symbolEffect(.replace))
-                        Text(model.justCopied ? L10n.copied : L10n.copy)
-                        if !model.justCopied {
-                            Text("⌘C").fontWeight(.medium).opacity(0.55)
+                        // Hidden copies of both states reserve the wider one's width, so the button
+                        // doesn't shrink when "Copy ⌘C" turns into "Copied".
+                        ZStack {
+                            copyTitle.hidden()
+                            Text(L10n.copied).hidden()
+                            if model.justCopied {
+                                Text(L10n.copied)
+                            } else {
+                                copyTitle
+                            }
                         }
                     }
                 }
@@ -131,7 +134,7 @@ struct PopupView: View {
                 if model.isEditable {
                     Button(action: model.onReplace) {
                         HStack(spacing: 6) {
-                            Image(systemName: "arrow.left.arrow.right")
+                            ButtonIcon(name: "arrow.left.arrow.right")
                             Text(L10n.replace)
                             Text("↩").fontWeight(.medium).opacity(0.7)
                         }
@@ -142,7 +145,7 @@ struct PopupView: View {
             }
             .font(.system(size: 13, weight: .semibold))
             .controlSize(.large)
-            .disabled(model.phase == .loading)
+            .disabled(model.phase == .loading || model.isRefreshing)
 
         case .needsDownload, .downloading:
             HStack(spacing: 8) {
@@ -152,13 +155,16 @@ struct PopupView: View {
                 Button {
                     model.requestDownload()
                 } label: {
-                    if model.phase == .downloading {
-                        HStack(spacing: 6) {
-                            ProgressView().controlSize(.small)
+                    HStack(spacing: 6) {
+                        if model.phase == .downloading {
+                            ProgressView()
+                                .controlSize(.small)
+                                .frame(width: ButtonIcon.size, height: ButtonIcon.size)
                             Text(L10n.downloading)
+                        } else {
+                            ButtonIcon(name: "arrow.down")
+                            Text(L10n.download)
                         }
-                    } else {
-                        Label(L10n.download, systemImage: "arrow.down")
                     }
                 }
                 .glassButton(prominent: true)
@@ -171,6 +177,158 @@ struct PopupView: View {
         case .failed:
             EmptyView()
         }
+    }
+}
+
+/// The "English → Russian" pill. Clicking it opens a menu to translate into another language
+/// or to correct a wrongly detected source language.
+private struct LanguageMenu: View {
+    let model: PopupModel
+    let pair: LanguagePair
+
+    private let catalog = LanguageCatalog.shared
+    private let settings = LanguageSettings.shared
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(catalog.name(for: pair.source))
+                .foregroundStyle(.secondary)
+            Image(systemName: "arrow.right")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(.secondary)
+            Text(catalog.name(for: pair.target))
+        }
+        .font(.system(size: 12, weight: .semibold))
+        .padding(.horizontal, 12)
+        .frame(height: 28)
+        .glassEffect(.regular, in: .capsule)
+        // SwiftUI's Menu flattens a custom label on macOS and loses the pill's look,
+        // so the pill stays a plain view and an AppKit menu opens on click.
+        .overlay {
+            MenuAnchor(
+                accessibilityLabel: "\(catalog.name(for: pair.source)) → \(catalog.name(for: pair.target))",
+                makeMenu: makeMenu
+            )
+        }
+    }
+
+    private func makeMenu() -> NSMenu {
+        let menu = NSMenu()
+        menu.addItem(.sectionHeader(title: L10n.translateTo))
+        for language in quickTargets {
+            menu.addItem(actionMenuItem(title: language.name, isSelected: language.key == pair.target) {
+                model.retranslate(target: language.key)
+            })
+        }
+        let others = otherTargets
+        if !others.isEmpty {
+            menu.addItem(submenu(L10n.otherLanguages, languages: others, selected: pair.target) {
+                model.retranslate(target: $0)
+            })
+        }
+        menu.addItem(.separator())
+        let sources = catalog.languages.filter { $0.key != pair.target }
+        menu.addItem(submenu(L10n.sourceLanguage, languages: sources, selected: pair.source) {
+            model.retranslate(source: $0)
+        })
+        return menu
+    }
+
+    private func submenu(
+        _ title: String,
+        languages: [LanguageCatalog.Language],
+        selected: String,
+        action: @escaping (String) -> Void
+    ) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        let submenu = NSMenu(title: title)
+        for language in languages {
+            submenu.addItem(actionMenuItem(title: language.name, isSelected: language.key == selected) {
+                action(language.key)
+            })
+        }
+        item.submenu = submenu
+        return item
+    }
+
+    /// My language and the last one I translated from or into, minus the source.
+    private var quickTargets: [LanguageCatalog.Language] {
+        [settings.primary, settings.lastForeign]
+            .filter { $0 != pair.source }
+            .compactMap { key in catalog.languages.first { $0.key == key } }
+    }
+
+    private var otherTargets: [LanguageCatalog.Language] {
+        let quickKeys = Set(quickTargets.map(\.key))
+        return catalog.languages.filter { $0.key != pair.source && !quickKeys.contains($0.key) }
+    }
+}
+
+/// Transparent click target laid over a SwiftUI view; opens an AppKit menu just below it.
+private struct MenuAnchor: NSViewRepresentable {
+    let accessibilityLabel: String
+    let makeMenu: () -> NSMenu
+
+    func makeNSView(context: Context) -> AnchorView {
+        AnchorView()
+    }
+
+    func updateNSView(_ view: AnchorView, context: Context) {
+        view.makeMenu = makeMenu
+        view.setAccessibilityLabel(accessibilityLabel)
+    }
+
+    final class AnchorView: NSView {
+        var makeMenu: (() -> NSMenu)?
+
+        override init(frame: NSRect) {
+            super.init(frame: frame)
+            setAccessibilityElement(true)
+            setAccessibilityRole(.popUpButton)
+        }
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+        override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+        override func mouseDown(with event: NSEvent) {
+            showMenu()
+        }
+
+        override func accessibilityPerformPress() -> Bool {
+            showMenu()
+            return true
+        }
+
+        private func showMenu() {
+            guard let menu = makeMenu?() else { return }
+            // Non-flipped view: y = 0 is the bottom edge, so this opens the menu just under the pill.
+            menu.popUp(positioning: nil, at: NSPoint(x: 0, y: -4), in: self)
+        }
+    }
+}
+
+/// Menu item that runs a closure. NSMenuItem holds its target weakly, so the item keeps it alive
+/// through `representedObject`.
+private func actionMenuItem(title: String, isSelected: Bool, handler: @escaping () -> Void) -> NSMenuItem {
+    let action = MenuAction(handler)
+    let item = NSMenuItem(title: title, action: #selector(MenuAction.fire), keyEquivalent: "")
+    item.target = action
+    item.representedObject = action
+    item.state = isSelected ? .on : .off
+    return item
+}
+
+private final class MenuAction: NSObject {
+    private let handler: () -> Void
+
+    init(_ handler: @escaping () -> Void) {
+        self.handler = handler
+    }
+
+    @objc func fire() {
+        handler()
     }
 }
 
@@ -212,6 +370,18 @@ private struct SkeletonLines: View {
         .onAppear { dimmed = true }
         .accessibilityElement()
         .accessibilityLabel(L10n.translating)
+    }
+}
+
+/// SF Symbols differ in height (doc.on.doc is taller than checkmark), which made the buttons — and the
+/// whole popup — change height when an icon swapped. A fixed box keeps every button the same height.
+private struct ButtonIcon: View {
+    static let size: CGFloat = 16
+    let name: String
+
+    var body: some View {
+        Image(systemName: name)
+            .frame(width: Self.size, height: Self.size)
     }
 }
 
