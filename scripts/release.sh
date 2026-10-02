@@ -15,17 +15,20 @@ cd "$(dirname "$0")/.."
 
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)"
 DMG="build/Slovo-$VERSION.dmg"
-STAGING="build/dmg"
 
 UNIVERSAL=1 CODESIGN_IDENTITY="${CODESIGN_IDENTITY:--}" ./scripts/build-app.sh
 
-# The disk image holds the app and a link to /Applications to drag it onto.
-rm -rf "$STAGING" "$DMG"
-mkdir -p "$STAGING"
-ditto build/Slovo.app "$STAGING/Slovo.app"
-ln -s /Applications "$STAGING/Applications"
-hdiutil create -volname "Slovo $VERSION" -srcfolder "$STAGING" -fs HFS+ -format UDZO -ov "$DMG" >/dev/null
-rm -rf "$STAGING"
+# The disk image window, laid out by dmgbuild (scripts/dmg-settings.py): it writes Finder's
+# .DS_Store itself, so no AppleScript driving Finder. Installed once into its own venv in .build.
+DMGBUILD=".build/dmgbuild/bin/dmgbuild"
+if [ ! -x "$DMGBUILD" ]; then
+  python3 -m venv .build/dmgbuild
+  .build/dmgbuild/bin/pip install --quiet --disable-pip-version-check "dmgbuild==1.6.5"
+fi
+rm -f "$DMG"
+"$DMGBUILD" -s scripts/dmg-settings.py \
+  -D app=build/Slovo.app -D icon=build/Slovo.app/Contents/Resources/AppIcon.icns \
+  "Slovo $VERSION" "$DMG" >/dev/null
 echo "Built $DMG"
 
 # The appcast lists this version, the EdDSA signature of the disk image and its download link.
