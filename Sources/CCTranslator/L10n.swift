@@ -31,12 +31,29 @@ enum L10n {
         "Downloaded languages work offline. To remove them, go to System Settings → General → Language & Region → Translation Languages."
     )
 
+    static func removeApp(_ name: String) -> String {
+        pick("Убрать «\(name)»", "Remove \(name)")
+    }
+
+    static func disableIn(_ name: String) -> String {
+        pick("Отключить в «\(name)»", "Disable in \(name)")
+    }
+
     static func myLanguageFooter(lastForeign: String) -> String {
         pick(
             "Текст на любом другом языке переводится на мой. Текст на моём языке — на язык последнего перевода (сейчас \(lastForeign)).",
             "Text in any other language is translated into mine. Text in mine goes into the language of the last translation (now \(lastForeign))."
         )
     }
+    static let excludedApps = pick("Исключения", "Excluded Apps")
+    static let excludedAppsFooter = pick(
+        "В этих приложениях ⌘C C не открывает перевод — например, в терминале или редакторе кода.",
+        "⌘C C doesn't open the translator in these apps — for example, a terminal or code editor."
+    )
+    static let noExcludedApps = pick("Нет исключений", "No excluded apps")
+    static let addApp = pick("Добавить приложение", "Add App")
+    static let runningApps = pick("Запущенные", "Running")
+    static let chooseApp = pick("Выбрать…", "Choose…")
     static let general = pick("Общие", "General")
     static let shortcut = pick("Сочетание клавиш", "Shortcut")
     static let openAtLogin = pick("Открывать при входе", "Open at Login")

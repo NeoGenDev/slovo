@@ -11,12 +11,17 @@ final class AppController {
         didSet { updateLoginItem() }
     }
 
+    /// The app the user was in before opening the menu bar menu, for its "Disable in…" item.
+    private(set) var lastActiveApp: NSRunningApplication?
+
     @ObservationIgnored private let hotkey = DoubleCopyMonitor()
     @ObservationIgnored private let popup = PopupController()
     @ObservationIgnored private var trustTimer: Timer?
+    @ObservationIgnored private var activationObserver: NSObjectProtocol?
 
     func start() {
         hotkey.onTrigger = { [weak self] in self?.handleDoubleCopy() }
+        trackActiveApp()
 
         // Load the language list up front so the first popup doesn't wait for it.
         Task {
@@ -53,7 +58,27 @@ final class AppController {
         hotkey.start()
     }
 
+    private func trackActiveApp() {
+        noteActivation(of: NSWorkspace.shared.frontmostApplication)
+        activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
+        ) { [weak self] notification in
+            let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            MainActor.assumeIsolated { self?.noteActivation(of: app) }
+        }
+    }
+
+    private func noteActivation(of app: NSRunningApplication?) {
+        // Our own Settings window activating us isn't an app the user would want to exclude.
+        guard let app, app.bundleIdentifier != Bundle.main.bundleIdentifier else { return }
+        lastActiveApp = app
+    }
+
     private func handleDoubleCopy() {
+        if let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
+           ExcludedApps.shared.contains(bundleID) {
+            return
+        }
         // Inspect the focused element right away, while the source app still owns focus.
         let context = SelectionInspector.capture()
         Task {

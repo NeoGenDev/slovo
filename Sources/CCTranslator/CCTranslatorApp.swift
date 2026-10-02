@@ -37,6 +37,15 @@ private struct MenuContent: View {
                 Accessibility.openSettings()
             }
         }
+        if let app = controller.lastActiveApp, let bundleID = app.bundleIdentifier {
+            Toggle(
+                L10n.disableIn(app.localizedName ?? AppInfo.name(for: bundleID)),
+                isOn: Binding(
+                    get: { ExcludedApps.shared.contains(bundleID) },
+                    set: { ExcludedApps.shared.setExcluded($0, bundleID: bundleID) }
+                )
+            )
+        }
         Divider()
         Button(L10n.settings) {
             // A menu bar app isn't active by default, so the window would open behind others.

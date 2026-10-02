@@ -1,15 +1,19 @@
 import SwiftUI
 import Translation
+import UniformTypeIdentifiers
 
 struct SettingsView: View {
     @Bindable var settings: LanguageSettings
     @Bindable var controller: AppController
     let catalog: LanguageCatalog
+    var excludedApps = ExcludedApps.shared
 
     /// Keys of downloaded languages; nil until the first check finishes.
     @State private var installed: Set<String>?
     @State private var downloading: String?
     @State private var downloadConfiguration: TranslationSession.Configuration?
+    /// Bundle IDs of running regular apps that can still be excluded.
+    @State private var runningApps: [String] = []
 
     var body: some View {
         Form {
@@ -44,6 +48,15 @@ struct SettingsView: View {
                 }
             }
 
+            Section {
+                excludedAppsList
+            } header: {
+                Text(L10n.excludedApps)
+            } footer: {
+                Text(L10n.excludedAppsFooter)
+                    .foregroundStyle(.secondary)
+            }
+
             Section(L10n.general) {
                 LabeledContent(L10n.shortcut, value: "⌘C C")
                 Toggle(L10n.openAtLogin, isOn: $controller.launchAtLogin)
@@ -56,8 +69,10 @@ struct SettingsView: View {
         .task(id: catalog.languages.count) {
             await refreshInstalled()
         }
-        // Languages may have been removed in System Settings meanwhile.
+        .onAppear(perform: refreshRunningApps)
+        // Languages may have been removed in System Settings meanwhile, and other apps launched or quit.
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            refreshRunningApps()
             Task { await refreshInstalled() }
         }
         .translationTask(downloadConfiguration) { session in
@@ -104,6 +119,77 @@ struct SettingsView: View {
         } else {
             ProgressView()
                 .frame(maxWidth: .infinity)
+        }
+    }
+
+    @ViewBuilder
+    private var excludedAppsList: some View {
+        if excludedApps.bundleIDs.isEmpty {
+            Text(L10n.noExcludedApps)
+                .foregroundStyle(.secondary)
+        }
+        ForEach(excludedApps.bundleIDs, id: \.self) { bundleID in
+            let name = AppInfo.name(for: bundleID)
+            HStack(spacing: 8) {
+                Image(nsImage: AppInfo.icon(for: bundleID))
+                Text(name)
+                Spacer()
+                Button {
+                    excludedApps.setExcluded(false, bundleID: bundleID)
+                } label: {
+                    Image(systemName: "minus.circle.fill")
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+                .accessibilityLabel(L10n.removeApp(name))
+            }
+        }
+        Menu {
+            let candidates = runningApps.filter { !excludedApps.contains($0) }
+            if !candidates.isEmpty {
+                Section(L10n.runningApps) {
+                    ForEach(candidates, id: \.self) { bundleID in
+                        Button {
+                            excludedApps.setExcluded(true, bundleID: bundleID)
+                        } label: {
+                            Label {
+                                Text(AppInfo.name(for: bundleID))
+                            } icon: {
+                                Image(nsImage: AppInfo.icon(for: bundleID))
+                            }
+                        }
+                    }
+                }
+                Divider()
+            }
+            Button(L10n.chooseApp, action: chooseApps)
+        } label: {
+            Label(L10n.addApp, systemImage: "plus.circle")
+        }
+        .menuStyle(.button)
+        .fixedSize()
+    }
+
+    private func refreshRunningApps() {
+        let ownID = Bundle.main.bundleIdentifier
+        runningApps = NSWorkspace.shared.runningApplications
+            .filter { $0.activationPolicy == .regular }
+            .compactMap(\.bundleIdentifier)
+            .filter { $0 != ownID }
+            .sorted { AppInfo.name(for: $0).localizedStandardCompare(AppInfo.name(for: $1)) == .orderedAscending }
+    }
+
+    private func chooseApps() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.application]
+        panel.allowsMultipleSelection = true
+        panel.directoryURL = URL(filePath: "/Applications")
+        panel.prompt = L10n.addApp
+        guard panel.runModal() == .OK else { return }
+        for url in panel.urls {
+            if let bundleID = Bundle(url: url)?.bundleIdentifier, bundleID != Bundle.main.bundleIdentifier {
+                excludedApps.setExcluded(true, bundleID: bundleID)
+            }
         }
     }
 
