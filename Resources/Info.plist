@@ -13,6 +13,10 @@
 	<string>Slovo</string>
 	<key>CFBundleExecutable</key>
 	<string>Slovo</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleIconName</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>dev.slovo.app</string>
 	<key>CFBundleInfoDictionaryVersion</key>

@@ -13,6 +13,10 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN_DIR/Slovo" "$APP/Contents/MacOS/Slovo"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
+# Icon Composer icon: actool turns it into Assets.car (Liquid Glass layers) plus AppIcon.icns for older systems.
+xcrun actool Resources/AppIcon.icon --compile "$APP/Contents/Resources" --platform macosx \
+  --minimum-deployment-target 26.0 --app-icon AppIcon \
+  --output-partial-info-plist "$(mktemp -d)/partial.plist" >/dev/null
 
 # A stable signing identity keeps the Accessibility grant across rebuilds;
 # ad-hoc signing ("-") changes the code hash every build and macOS forgets the grant.
