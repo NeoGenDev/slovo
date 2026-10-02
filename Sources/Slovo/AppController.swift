@@ -21,11 +21,16 @@ final class AppController {
     @ObservationIgnored private var activationObserver: NSObjectProtocol?
     @ObservationIgnored private let hotKeys = HotKeySettings.shared
     @ObservationIgnored private var registeredHotKeys: [HotKeySettings.Action: GlobalHotKey] = [:]
+    /// The frontmost app is on the excluded list, so the registered shortcuts are off for now.
+    @ObservationIgnored private var frontmostIsExcluded = false
     @ObservationIgnored private var isCapturingScreen = false
 
     func start() {
         hotkey.onTrigger = { [weak self] in self?.handleDoubleCopy() }
         hotKeys.onChange = { [weak self] in self?.applyHotKeys() }
+        ExcludedApps.shared.onChange = { [weak self] in
+            self?.updateExclusion(for: NSWorkspace.shared.frontmostApplication)
+        }
         applyHotKeys()
         trackActiveApp()
 
@@ -47,8 +52,8 @@ final class AppController {
         }
     }
 
-    /// (Re)registers the shortcuts from `HotKeySettings`: at launch, whenever they change, and
-    /// with none while a new one is being recorded.
+    /// (Re)registers the shortcuts from `HotKeySettings`: at launch, whenever they change, with none
+    /// while a new one is being recorded, and with none while an excluded app is in front.
     private func applyHotKeys() {
         for hotKey in registeredHotKeys.values { hotKey.unregister() }
         registeredHotKeys = [:]
@@ -59,6 +64,11 @@ final class AppController {
         } else {
             hotkey.stop()
         }
+
+        // A registered shortcut takes the keystroke from every app, so in an excluded app it's
+        // unregistered rather than ignored: the app gets the keys as if Slovo weren't running.
+        // (⌘C C only listens, so it checks the exclusion when it fires instead.)
+        guard !frontmostIsExcluded else { return }
 
         var errors: [HotKeySettings.Action: String] = [:]
         if !isRecording {
@@ -144,9 +154,17 @@ final class AppController {
     }
 
     private func noteActivation(of app: NSRunningApplication?) {
+        updateExclusion(for: app)
         // Our own Settings window activating us isn't an app the user would want to exclude.
         guard let app, app.bundleIdentifier != Bundle.main.bundleIdentifier else { return }
         lastActiveApp = app
+    }
+
+    private func updateExclusion(for app: NSRunningApplication?) {
+        let excluded = app?.bundleIdentifier.map(ExcludedApps.shared.contains) ?? false
+        guard excluded != frontmostIsExcluded else { return }
+        frontmostIsExcluded = excluded
+        applyHotKeys()
     }
 
     private func handleDoubleCopy() {

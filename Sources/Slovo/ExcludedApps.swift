@@ -1,14 +1,19 @@
 import AppKit
 import Observation
 
-/// Apps where ⌘C C doesn't open the translator, e.g. a terminal or code editor. Stored by bundle ID.
+/// Apps where Slovo's shortcuts are off, e.g. a terminal or code editor. Stored by bundle ID.
 @Observable
 final class ExcludedApps {
     static let shared = ExcludedApps()
 
     private(set) var bundleIDs: [String] {
-        didSet { UserDefaults.standard.set(bundleIDs, forKey: Self.defaultsKey) }
+        didSet {
+            UserDefaults.standard.set(bundleIDs, forKey: Self.defaultsKey)
+            onChange()
+        }
     }
+
+    @ObservationIgnored var onChange: () -> Void = {}
 
     private static let defaultsKey = "excludedApps"
 

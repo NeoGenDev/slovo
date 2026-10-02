@@ -54,8 +54,8 @@ nonisolated enum L10n {
     }
     static let excludedApps = pick("Исключения", "Excluded Apps")
     static let excludedAppsFooter = pick(
-        "В этих приложениях ⌘C C не открывает перевод — например, в терминале или редакторе кода.",
-        "⌘C C doesn't open the translator in these apps — for example, a terminal or code editor."
+        "В этих приложениях сочетания Slovo не работают, и нажатия достаются самому приложению — например, терминалу или редактору кода.",
+        "Slovo's shortcuts are off in these apps, and the keys go to the app itself — for example, a terminal or code editor."
     )
     static let noExcludedApps = pick("Нет исключений", "No excluded apps")
     static let addApp = pick("Добавить приложение", "Add App")

@@ -25,7 +25,7 @@ Translation runs on your Mac with Apple Translation: no account, no network, not
 - **Read aloud.** 🔊 next to the original and the translation reads them with the best installed system voice for each language.
 - **Improve with AI.** One button (⌘I) sends the text and Apple's draft to Claude or any OpenAI-compatible API (OpenAI, OpenRouter, a local Ollama or LM Studio), which rewrites it to read naturally: idioms, slang, tone. Optional, with your own key; local servers need none.
 - **History.** The last ten translations are in the menu bar menu: click to copy a translation, ⌥-click to copy the original.
-- **Excluded apps.** Turn ⌘C C off in apps where you copy twice on purpose, such as a terminal or code editor.
+- **Excluded apps.** Turn Slovo's shortcuts off in apps where you'd rather keep the keys, such as a terminal or code editor. The keys then go to the app as if Slovo weren't running.
 - **Light and dark, English and Russian UI.** The interface follows the system appearance and language.
 
 <p align="center">
@@ -50,7 +50,7 @@ Settings are split into four tabs:
 | --- | --- |
 | General | Shortcuts for translating the selection (⌘C C by default) and a screen area (⇧⌘2), Open at Login |
 | Languages | Your language, downloaded languages, downloading new ones |
-| Excluded Apps | Apps where ⌘C C does nothing |
+| Excluded Apps | Apps where Slovo's shortcuts are off |
 | AI | The provider: Claude (API key and model: Opus 5.5, Sonnet 5.5 or Haiku 4.5) or an OpenAI-compatible API (address, optional key, and a model picked from the server's list or typed in). Keys are kept in the Keychain |
 
 <p align="center">
@@ -72,7 +72,7 @@ Settings are split into four tabs:
 
 - macOS 26 or later (Apple Translation, Liquid Glass, Vision document recognition)
 - Xcode 26 to build
-- Accessibility permission, for ⌘C C and Replace
+- Accessibility permission, for the selection shortcut and Replace
 - Screen Recording permission, only for ⇧⌘2; macOS asks the first time
 
 ## Build and run
