@@ -77,6 +77,7 @@ final class PopupController: NSObject, NSWindowDelegate {
     func show(text: String, context: SelectionContext) {
         closeTask?.cancel()
         revealTask?.cancel()
+        Speaker.shared.stop()
         generation += 1
         if panel.isVisible { panel.orderOut(nil) }
         // Stays false while the panel is on screen but transparent, laying out its first content.
@@ -100,6 +101,7 @@ final class PopupController: NSObject, NSWindowDelegate {
         closeTask?.cancel()
         revealTask?.cancel()
         model.cancel()
+        Speaker.shared.stop()
         stopMouseMonitor()
         guard panel.isVisible else { return }
 

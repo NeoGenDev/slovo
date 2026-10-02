@@ -25,6 +25,8 @@ final class PopupModel {
     private(set) var sourceText = ""
     private(set) var translation = ""
     private(set) var pair: LanguagePair?
+    /// For a single word: its entry from Dictionary.app, shown under the translation.
+    private(set) var dictionaryEntry: DictionaryEntry?
     /// Re-translating after a language change: the previous result stays visible, dimmed.
     private(set) var isRefreshing = false
     private(set) var isEditable = true
@@ -56,6 +58,7 @@ final class PopupModel {
         justCopied = false
         downloadConfiguration = nil
         self.isEditable = isEditable
+        dictionaryEntry = DictionaryLookup.entry(for: text)
         phase = .loading
         session += 1
 

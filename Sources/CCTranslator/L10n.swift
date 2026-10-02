@@ -65,6 +65,12 @@ enum L10n {
 
     // Popup
     static let close = pick("Закрыть", "Close")
+    static let speakOriginal = pick("Озвучить оригинал", "Speak Original")
+    static let speakTranslation = pick("Озвучить перевод", "Speak Translation")
+    static let stopSpeaking = pick("Остановить озвучку", "Stop Speaking")
+    static let openInDictionary = pick("Открыть в Словаре", "Open in Dictionary")
+    static let britishEnglish = pick("брит.", "UK")
+    static let americanEnglish = pick("амер.", "US")
     static let translateTo = pick("Перевести на", "Translate to")
     static let otherLanguages = pick("Другие языки", "Other languages")
     static let sourceLanguage = pick("Язык оригинала", "Source language")

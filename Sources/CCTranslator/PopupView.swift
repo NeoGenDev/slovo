@@ -17,12 +17,22 @@ struct PopupView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             header
-            Text(model.sourceText)
-                .font(.system(size: 13))
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-                .padding(.horizontal, 2)
+            HStack(alignment: .top, spacing: 8) {
+                Text(model.sourceText)
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    // Inset like the translation's text; the speak buttons stay flush right, in one column.
+                    .padding(.leading, 2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if let pair = model.pair {
+                    SpeakButton(text: model.sourceText, language: pair.source, id: "source", label: L10n.speakOriginal)
+                }
+            }
             content
+            if let entry = model.dictionaryEntry, model.phase == .loading || model.phase == .result {
+                DictionaryCard(entry: entry)
+            }
             footer
         }
         .id(model.session)
@@ -62,8 +72,14 @@ struct PopupView: View {
         case .loading:
             SkeletonLines()
         case .result:
-            TranslationText(text: model.translation)
-                .opacity(model.isRefreshing ? 0.4 : 1)
+            HStack(alignment: .top, spacing: 8) {
+                TranslationText(text: model.translation)
+                if let pair = model.pair {
+                    SpeakButton(text: model.translation, language: pair.target, id: "translation", label: L10n.speakTranslation)
+                        .padding(.top, 3)
+                }
+            }
+            .opacity(model.isRefreshing ? 0.4 : 1)
         case .needsDownload, .downloading:
             downloadPrompt
         case .failed(let message):
@@ -329,6 +345,64 @@ private final class MenuAction: NSObject {
 
     @objc func fire() {
         handler()
+    }
+}
+
+/// Reads its text aloud; while reading, the icon animates and a second click stops it.
+private struct SpeakButton: View {
+    let text: String
+    /// `LanguageCatalog` key.
+    let language: String
+    let id: String
+    let label: String
+
+    private let speaker = Speaker.shared
+
+    var body: some View {
+        let isSpeaking = speaker.speakingID == id
+        Button {
+            speaker.toggle(text, language: LanguageCatalog.shared.variant(for: language), id: id)
+        } label: {
+            Image(systemName: isSpeaking ? "speaker.wave.2.fill" : "speaker.wave.2")
+                .symbolEffect(.variableColor.iterative, isActive: isSpeaking)
+                .font(.system(size: 12, weight: .medium))
+                .frame(width: 16, height: 16)
+        }
+        .buttonStyle(.borderless)
+        .foregroundStyle(isSpeaking ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+        .help(isSpeaking ? L10n.stopSpeaking : label)
+        .accessibilityLabel(isSpeaking ? L10n.stopSpeaking : label)
+    }
+}
+
+/// Pronunciation and a short dictionary entry for a single word, with a way to the full entry.
+private struct DictionaryCard: View {
+    let entry: DictionaryEntry
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let pronunciation = entry.pronunciation {
+                Text(pronunciation)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+            if !entry.body.isEmpty {
+                Text(entry.body)
+                    .font(.system(size: 13))
+                    .lineSpacing(2)
+                    .lineLimit(4)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+            }
+            Button(L10n.openInDictionary, action: entry.openInDictionaryApp)
+                .buttonStyle(.link)
+                .font(.system(size: 12))
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        // Concentric with the popup: its 26 pt corners minus the 14 pt padding.
+        .background(.primary.opacity(0.05), in: .rect(cornerRadius: PopupMetrics.cornerRadius - PopupMetrics.padding))
     }
 }
 
