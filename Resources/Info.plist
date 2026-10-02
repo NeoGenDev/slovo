@@ -35,5 +35,11 @@
 	<true/>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://github.com/NeoGenDev/slovo/releases/latest/download/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>gTEkp9aT779DjVyTXSHOpkFsF4Vqr86+vphycmD7vds=</string>
 </dict>
 </plist>

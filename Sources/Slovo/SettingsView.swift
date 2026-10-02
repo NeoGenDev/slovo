@@ -47,6 +47,8 @@ private extension View {
 private struct GeneralPane: View {
     @Bindable var controller: AppController
     var hotKeys = HotKeySettings.shared
+    /// Sparkle's setting isn't observable; the toggle keeps its own copy and writes through.
+    @State private var checksForUpdates = Updater.shared.automaticallyChecks
 
     var body: some View {
         Form {
@@ -68,9 +70,13 @@ private struct GeneralPane: View {
             }
             Section {
                 Toggle(L10n.openAtLogin, isOn: $controller.launchAtLogin)
+                Toggle(L10n.checkUpdatesAutomatically, isOn: $checksForUpdates)
             }
         }
         .settingsPane()
+        .onChange(of: checksForUpdates) { _, enabled in
+            Updater.shared.automaticallyChecks = enabled
+        }
     }
 }
 

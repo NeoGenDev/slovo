@@ -52,7 +52,7 @@ Settings are split into four tabs:
 
 | Tab | What's there |
 | --- | --- |
-| General | Shortcuts for translating the selection (⌘C C by default) and a screen area (⇧⌘2), translation over the screen (⌥⇧⌘2), writing with translation (⇧⌘1), Open at Login |
+| General | Shortcuts for translating the selection (⌘C C by default) and a screen area (⇧⌘2), translation over the screen (⌥⇧⌘2), writing with translation (⇧⌘1), Open at Login, automatic update checks |
 | Languages | Your language, downloaded languages, downloading new ones |
 | Excluded Apps | Apps where Slovo's shortcuts are off |
 | AI | The provider: Claude (API key and a model from your account's list) or an OpenAI-compatible API (address, optional key, and a model picked from the server's list or typed in). Keys are kept in the Keychain |
@@ -96,6 +96,8 @@ xattr -dr com.apple.quarantine /Applications/Slovo.app
 
 Then allow Slovo in **Privacy & Security → Accessibility**, and later in **Screen Recording** when you first press ⇧⌘2. Without a Developer ID signature macOS sees every update as a new app, so after updating, switch Slovo off and on again in those two lists.
 
+Slovo updates itself with [Sparkle](https://sparkle-project.org): it checks the latest GitHub release once a day (or from **Check for Updates…** in the menu), and installs a new version only if its signature matches the key built into the app.
+
 ## Build and run
 
 ```bash
@@ -106,7 +108,7 @@ make run
 
 On first launch, allow Slovo in **System Settings → Privacy & Security → Accessibility**.
 
-`make release` builds a universal (Apple silicon and Intel) app signed ad-hoc and packs it into `build/Slovo-<version>.dmg`; the version comes from `Resources/Info.plist`.
+`make release` builds a universal (Apple silicon and Intel) app signed ad-hoc, packs it into `build/Slovo-<version>.dmg` and writes `build/appcast.xml`, the update feed, signed with the Sparkle key from your login Keychain (`generate_keys` creates one). To publish a version: raise `CFBundleShortVersionString` and `CFBundleVersion` in `Resources/Info.plist`, run `make release`, and attach both files to a GitHub release tagged `v<version>`.
 
 To open the popup without a shortcut, for example while working on the UI:
 

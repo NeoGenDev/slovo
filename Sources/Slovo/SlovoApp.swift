@@ -22,6 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         controller.start()
+        _ = Updater.shared
     }
 }
 
@@ -64,6 +65,9 @@ private struct MenuContent: View {
         Divider()
         HistoryMenu(history: .shared)
         Divider()
+        Button(L10n.checkForUpdates) {
+            Updater.shared.checkForUpdates()
+        }
         Button(L10n.settings) {
             guard !SettingsWindow.focusIfOpen() else { return }
             // A menu bar app isn't active by default, so the window would open behind others.

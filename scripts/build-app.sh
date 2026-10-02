@@ -15,8 +15,10 @@ swift build -c "$CONFIG" ${ARCH_FLAGS[@]+"${ARCH_FLAGS[@]}"}
 BIN_DIR="$(swift build -c "$CONFIG" ${ARCH_FLAGS[@]+"${ARCH_FLAGS[@]}"} --show-bin-path)"
 
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Frameworks"
 cp "$BIN_DIR/Slovo" "$APP/Contents/MacOS/Slovo"
+# Sparkle for updates; the executable finds it through its @executable_path/../Frameworks rpath.
+ditto "$BIN_DIR/Sparkle.framework" "$APP/Contents/Frameworks/Sparkle.framework"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 # Icon Composer icon: actool turns it into Assets.car (Liquid Glass layers) plus AppIcon.icns for older systems.
 xcrun actool Resources/AppIcon.icon --compile "$APP/Contents/Resources" --platform macosx \
@@ -30,6 +32,19 @@ if [ -z "$IDENTITY" ]; then
   echo "warning: no Apple Development identity found, signing ad-hoc" >&2
   IDENTITY="-"
 fi
-codesign --force --options runtime --sign "$IDENTITY" "$APP"
+# Hardened runtime needs the app and Sparkle signed by the same team. Ad-hoc signatures have no
+# team, so release builds (ad-hoc, see release.sh) go without it; it only matters for notarization.
+RUNTIME=(--options runtime)
+if [ "$IDENTITY" = "-" ]; then RUNTIME=(); fi
+sign() { codesign --force ${RUNTIME[@]+"${RUNTIME[@]}"} --sign "$IDENTITY" "$@"; }
+
+# Sparkle's helpers first, inside out, as its documentation describes; then the app around them.
+SPARKLE="$APP/Contents/Frameworks/Sparkle.framework"
+sign "$SPARKLE/Versions/B/XPCServices/Installer.xpc"
+sign --preserve-metadata=entitlements "$SPARKLE/Versions/B/XPCServices/Downloader.xpc"
+sign "$SPARKLE/Versions/B/Autoupdate"
+sign "$SPARKLE/Versions/B/Updater.app"
+sign "$SPARKLE"
+sign "$APP"
 
 echo "Built $APP"

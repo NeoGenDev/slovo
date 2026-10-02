@@ -20,6 +20,8 @@ nonisolated enum L10n {
     static let writeAndTranslate = pick("Написать с переводом", "Write and Translate")
     static let translateOnScreen = pick("Перевести поверх экрана", "Translate on Screen")
     static let settings = pick("Настройки…", "Settings…")
+    static let checkForUpdates = pick("Проверить обновления…", "Check for Updates…")
+    static let checkUpdatesAutomatically = pick("Проверять обновления автоматически", "Check for Updates Automatically")
     static let history = pick("История переводов", "Translation History")
     static let historyEmpty = pick("Пока пусто", "No translations yet")
     static let historyHint = pick("Удерживайте ⌥, чтобы скопировать оригинал", "Hold ⌥ to copy the original")
