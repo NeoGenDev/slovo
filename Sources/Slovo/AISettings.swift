@@ -31,6 +31,20 @@ struct KeychainSecret {
     let service: String
     private let account = "api-key"
 
+    /// Whether the key is saved, from the item's attributes alone. Reading the key itself makes macOS ask
+    /// for Keychain access when the app's signature changed since it was saved, which for an ad-hoc signed
+    /// app is every update; asking only for attributes doesn't.
+    var exists: Bool {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecReturnAttributes as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+        ]
+        return SecItemCopyMatching(query as CFDictionary, nil) == errSecSuccess
+    }
+
     var value: String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -125,8 +139,9 @@ final class AISettings {
         claudeModelSupportsLowEffort = defaults.object(forKey: Keys.claudeModelSupportsLowEffort) as? Bool ?? true
         openAIBaseURL = defaults.string(forKey: Keys.openAIBaseURL) ?? Self.defaultOpenAIBaseURL
         openAIModel = defaults.string(forKey: Keys.openAIModel) ?? ""
-        hasClaudeKey = claudeSecret.value != nil
-        hasOpenAIKey = openAISecret.value != nil
+        // Only whether the keys are there: the keys themselves are read when a request needs them.
+        hasClaudeKey = claudeSecret.exists
+        hasOpenAIKey = openAISecret.exists
     }
 
     /// Whether the ✦ button has somewhere to send the text. Local OpenAI-compatible servers
