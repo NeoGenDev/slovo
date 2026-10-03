@@ -168,9 +168,9 @@ private enum SettingsWindow {
             ?? NSApp.windows.first { $0.styleMask.contains(.titled) && ($0.isVisible || $0.isMiniaturized) }
     }
 
-    /// Share of the free vertical space left above the window; under half sits it a little above
-    /// center, which reads as centered (and leaves room to grow down when a taller tab opens).
-    private static let spaceAboveShare: CGFloat = 0.4
+    /// Share of the free vertical space left above the window; under half sits it above center,
+    /// which reads as centered and leaves room to grow down when a taller tab opens.
+    private static let spaceAboveShare: CGFloat = 0.3
 
     /// Centers on the screen with the pointer: the one whose menu bar was just clicked.
     private static func center(_ window: NSWindow) {

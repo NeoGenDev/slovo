@@ -34,12 +34,20 @@ struct SettingsView: View {
     }
 }
 
+private enum SettingsMetrics {
+    /// Where a tab with a long list stops growing: room for about ten rows, well within a laptop screen.
+    static let listPaneMaxHeight: CGFloat = 560
+}
+
 private extension View {
-    /// A tab's form: fixed width, as tall as its content.
-    func settingsPane() -> some View {
+    /// A tab's form: fixed width, as tall as its content. Tabs with lists that can grow long (22 languages,
+    /// any number of excluded apps) stop growing at `maxHeight` and scroll inside instead.
+    func settingsPane(maxHeight: CGFloat? = nil) -> some View {
         formStyle(.grouped)
-            .scrollDisabled(true)
+            .scrollDisabled(maxHeight == nil)
             .frame(width: 460)
+            // With no height proposed, the frame takes the form's own height, capped at `maxHeight`.
+            .frame(maxHeight: maxHeight ?? .infinity)
             .fixedSize(horizontal: false, vertical: true)
     }
 }
@@ -249,7 +257,7 @@ private struct LanguagesPane: View {
                 }
             }
         }
-        .settingsPane()
+        .settingsPane(maxHeight: SettingsMetrics.listPaneMaxHeight)
         .task(id: catalog.languages.count) {
             await refreshInstalled()
         }
@@ -388,7 +396,7 @@ private struct ExclusionsPane: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .settingsPane()
+        .settingsPane(maxHeight: SettingsMetrics.listPaneMaxHeight)
         .onAppear(perform: refreshRunningApps)
         // Other apps may have launched or quit meanwhile.
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
