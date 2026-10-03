@@ -332,7 +332,8 @@ final class ScreenOverlayController: NSObject {
         let pair = LanguagePair(source: source, target: settings.target(forSource: source))
         let sourceVariant = catalog.variant(for: pair.source)
         let targetVariant = catalog.variant(for: pair.target)
-        guard await LanguageAvailability().status(from: sourceVariant, to: targetVariant) == .installed else {
+        let sample = blocks.first?.text ?? ""
+        guard await LanguageCatalog.pairStatus(from: sourceVariant, to: targetVariant, sample: sample) == .installed else {
             onNeedsPopup(allText)
             return
         }

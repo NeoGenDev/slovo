@@ -395,7 +395,7 @@ final class PopupModel {
     private func translate(_ pair: LanguagePair) async {
         let source = catalog.variant(for: pair.source)
         let target = catalog.variant(for: pair.target)
-        let status = await LanguageAvailability().status(from: source, to: target)
+        let status = await LanguageCatalog.pairStatus(from: source, to: target, sample: sourceText)
         guard !Task.isCancelled else { return }
 
         switch status {

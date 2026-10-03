@@ -57,6 +57,22 @@ final class LanguageCatalog {
         await LanguageAvailability().status(from: language, to: nil)
     }
 
+    /// The pair's status, checked again when it says the languages need downloading: for a moment after
+    /// the system's translation service starts (say, when the Mac wakes) it can report installed languages
+    /// as missing. Translating a bit of `sample` settles it before Slovo asks the user to download.
+    static func pairStatus(from source: Locale.Language, to target: Locale.Language, sample: String) async -> LanguageAvailability.Status {
+        let status = await LanguageAvailability().status(from: source, to: target)
+        guard status == .supported else { return status }
+        // The SDK isn't Sendable-annotated; the session lives only for this one call.
+        nonisolated(unsafe) let session = TranslationSession(installedSource: source, target: target)
+        do {
+            _ = try await session.translate(sample.isEmpty ? "Hello" : String(sample.prefix(80)))
+            return .installed
+        } catch {
+            return .supported
+        }
+    }
+
     func variant(for key: String) -> Locale.Language {
         languages.first { $0.key == key }?.variant ?? Locale.Language(identifier: key)
     }
