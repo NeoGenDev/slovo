@@ -150,13 +150,22 @@ nonisolated enum L10n {
     static let composePlaceholder = pick("Напишите текст", "Type to translate")
     static let readOnlyField = pick("Поле только для чтения", "Read-only field")
     static let languagesNeeded = pick("Нужно скачать языки", "Languages need to be downloaded")
+    static let languageNeeded = pick("Нужно скачать язык", "A language needs to be downloaded")
+    static let languageDownloaded = pick("Скачан", "Downloaded")
+    static let languageMissing = pick("Не скачан", "Not downloaded")
+    static let languageDownloading = pick("Скачивается…", "Downloading…")
     static let downloadExplanation = pick(
         "Это делается один раз — дальше перевод работает офлайн, прямо на Mac.",
         "It's a one-time download — after that, translation works offline, right on your Mac."
     )
     static let notNow = pick("Не сейчас", "Not Now")
-    static let download = pick("Скачать", "Download")
+    static let download = pick("Скачать…", "Download…")
     static let downloading = pick("Скачивание…", "Downloading…")
+    static let waitingForConfirmation = pick("Ожидание…", "Waiting…")
+    static let confirmInSystemWindow = pick(
+        "Нажмите «Загрузить» в окне macOS, затем «Готово». Загрузка продолжится в фоне.",
+        "Click Download in the macOS window, then Done. The download continues in the background."
+    )
 
     // Errors
     static let noTextFound = pick("В выбранной области не найден текст", "No text found in the selected area")

@@ -28,6 +28,13 @@ final class PopupModel {
         var translation: String?
     }
 
+    /// A language of the pair and whether it's on the Mac, for the download prompt.
+    struct LanguageDownload: Identifiable, Equatable {
+        let key: String
+        var isInstalled: Bool
+        var id: String { key }
+    }
+
     /// From this length the popup becomes a large reading card that translates the text piece by piece.
     static let longTextThreshold = 1024
 
@@ -74,6 +81,10 @@ final class PopupModel {
     private(set) var session = 0
     /// Set by the controller once the panel is visible; content changes before that shouldn't animate.
     var isRevealed = false
+    /// The pair's languages while some need downloading, each with its own status.
+    private(set) var downloads: [LanguageDownload] = []
+    /// macOS's own download window is open: nothing downloads until the user confirms there.
+    private(set) var isAwaitingSystemPrompt = false
     /// Non-nil while a language download is requested; drives `.translationTask` in the view.
     private(set) var downloadConfiguration: TranslationSession.Configuration?
 
@@ -142,6 +153,8 @@ final class PopupModel {
         translation = ""
         pair = nil
         dictionaryEntry = nil
+        downloads = []
+        isAwaitingSystemPrompt = false
         isComposing = false
         draft = ""
         translatedSource = ""
@@ -313,30 +326,67 @@ final class PopupModel {
         )
     }
 
+    var missingLanguageCount: Int {
+        downloads.filter { !$0.isInstalled }.count
+    }
+
     /// Runs inside `.translationTask` — the only kind of session allowed to ask the system to download languages.
+    /// macOS shows its own window, where the user starts each download; apps can't download without it.
+    /// Meanwhile the popup checks each language every second, and once both are on the Mac it translates.
+    /// The window closes before the download lands ("it continues in the background").
     func download(using session: TranslationSession) async {
         // The SDK isn't Sendable-annotated, but this is exactly how Apple intends the session to be used.
         nonisolated(unsafe) let session = session
+        guard let pair else { return }
+        let downloadSession = self.session
+        let watcher = Task { [weak self] in
+            while !Task.isCancelled {
+                await self?.refreshDownloads(for: pair)
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
+        defer { watcher.cancel() }
+
+        animated { isAwaitingSystemPrompt = true }
         do {
             try await session.prepareTranslation()
-            // A long text is translated by the model's own task, which closing the popup cancels.
-            if isLong, let pair {
-                downloadConfiguration = nil
-                task = Task { await translate(pair) }
-                return
-            }
-            let text = sourceText
-            let response = try await session.translate(text)
-            if let pair { didTranslate(pair, into: response.targetText) }
-            translatedSource = text
-            animated {
-                translation = response.targetText
-                phase = .result
-            }
         } catch {
-            fail(L10n.languagesNotDownloaded)
+            // Cancelled in the system window: offer the download again.
+            downloadConfiguration = nil
+            guard self.session == downloadSession else { return }
+            await refreshDownloads(for: pair)
+            animated {
+                isAwaitingSystemPrompt = false
+                phase = .needsDownload
+            }
+            return
+        }
+        animated { isAwaitingSystemPrompt = false }
+        for _ in 0..<180 where missingLanguageCount > 0 {
+            try? await Task.sleep(for: .seconds(1))
+            await refreshDownloads(for: pair)
         }
         downloadConfiguration = nil
+        // A newer popup took over meanwhile.
+        guard self.session == downloadSession else { return }
+        // The window was closed without downloading, or the download stalled: offer it again.
+        guard missingLanguageCount == 0 else {
+            animated { phase = .needsDownload }
+            return
+        }
+        // Translated by the model's own task, which closing the popup cancels.
+        task = Task { await translate(pair) }
+    }
+
+    /// Each language of the pair on its own, so the prompt can say which one is missing.
+    private func refreshDownloads(for pair: LanguagePair) async {
+        var updated: [LanguageDownload] = []
+        for key in [pair.source, pair.target] where !updated.contains(where: { $0.key == key }) {
+            let isInstalled = await LanguageCatalog.status(of: catalog.variant(for: key)) == .installed
+            updated.append(LanguageDownload(key: key, isInstalled: isInstalled))
+        }
+        guard updated != downloads else { return }
+        animated { downloads = updated }
     }
 
     private func translate(_ pair: LanguagePair) async {
@@ -368,6 +418,8 @@ final class PopupModel {
                 fail(L10n.translationFailed(error.localizedDescription))
             }
         case .supported:
+            await refreshDownloads(for: pair)
+            guard !Task.isCancelled else { return }
             animated {
                 isRefreshing = false
                 phase = .needsDownload

@@ -220,13 +220,24 @@ struct PopupView: View {
                 .foregroundStyle(.tint)
                 .frame(width: 36, height: 36)
                 .background(.tint.opacity(0.15), in: .circle)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(L10n.languagesNeeded)
-                    .font(.system(size: 14, weight: .semibold))
-                Text(L10n.downloadExplanation)
-                    .font(.system(size: 13))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(model.missingLanguageCount == 1 ? L10n.languageNeeded : L10n.languagesNeeded)
+                        .font(.system(size: 14, weight: .semibold))
+                    Text(model.isAwaitingSystemPrompt ? L10n.confirmInSystemWindow : L10n.downloadExplanation)
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .contentTransition(.opacity)
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(model.downloads) { language in
+                        LanguageDownloadRow(
+                            language: language,
+                            isDownloading: model.phase == .downloading && !model.isAwaitingSystemPrompt
+                        )
+                    }
+                }
             }
         }
         .padding(2)
@@ -317,7 +328,7 @@ struct PopupView: View {
                             ProgressView()
                                 .controlSize(.small)
                                 .frame(width: ButtonIcon.size, height: ButtonIcon.size)
-                            Text(L10n.downloading)
+                            Text(model.isAwaitingSystemPrompt ? L10n.waitingForConfirmation : L10n.downloading)
                         } else {
                             ButtonIcon(name: "arrow.down")
                             Text(L10n.download)
@@ -486,6 +497,41 @@ private final class MenuAction: NSObject {
 
     @objc func fire() {
         handler()
+    }
+}
+
+/// One language of the pair in the download prompt: on the Mac, missing, or on its way.
+private struct LanguageDownloadRow: View {
+    let language: PopupModel.LanguageDownload
+    let isDownloading: Bool
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Group {
+                if language.isInstalled {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                } else if isDownloading {
+                    ProgressView()
+                        .controlSize(.mini)
+                } else {
+                    Image(systemName: "circle.dashed")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(width: 16, height: 16)
+            Text(LanguageCatalog.shared.name(for: language.key))
+            Spacer(minLength: 8)
+            Text(status)
+                .foregroundStyle(.secondary)
+                .contentTransition(.opacity)
+        }
+        .font(.system(size: 13))
+    }
+
+    private var status: String {
+        if language.isInstalled { return L10n.languageDownloaded }
+        return isDownloading ? L10n.languageDownloading : L10n.languageMissing
     }
 }
 
