@@ -209,6 +209,8 @@ final class PopupModel {
     }
 
     func cancel() {
+        // Ends a wait for a language download too; macOS carries on downloading in the background.
+        downloadConfiguration = nil
         task?.cancel()
         task = nil
         improveTask?.cancel()
@@ -363,7 +365,8 @@ final class PopupModel {
         }
         animated { isAwaitingSystemPrompt = false }
         for _ in 0..<180 where missingLanguageCount > 0 {
-            try? await Task.sleep(for: .seconds(1))
+            // A cancelled sleep returns at once; carrying on would poll 180 times in a row.
+            do { try await Task.sleep(for: .seconds(1)) } catch { return }
             await refreshDownloads(for: pair)
         }
         downloadConfiguration = nil

@@ -246,6 +246,12 @@ final class ScreenOverlayModel {
         withAnimation(.easeOut(duration: 0.2)) { blocks = updated }
     }
 
+    /// After the overlay closes: nothing of the area stays in memory.
+    func clear() {
+        blocks = []
+        isTranslating = false
+    }
+
     func setTranslation(_ text: String, ofBlock id: String) {
         guard let index = blocks.firstIndex(where: { $0.id == id }) else { return }
         withAnimation(.easeOut(duration: 0.2)) { blocks[index].translation = text }
@@ -358,6 +364,9 @@ final class ScreenOverlayController: NSObject {
         session?.cancel()
         session = nil
         capture = nil
+        cache = [:]
+        lastFingerprint = nil
+        model.clear()
         stopDismissalMonitors()
         let wasShown = toolbarPanel?.isVisible == true
         patchesPanel?.orderOut(nil)
