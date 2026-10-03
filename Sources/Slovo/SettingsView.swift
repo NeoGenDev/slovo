@@ -554,8 +554,9 @@ private struct AIPane: View {
             claudeModels = loaded
             modelsError = loaded.isEmpty ? L10n.aiNoModels : nil
             // Newest first: a fresh setup, or a model the account no longer offers, gets the newest one.
-            if let newest = loaded.first, !loaded.contains(where: { $0.id == settings.claudeModel }) {
-                settings.selectClaudeModel(newest)
+            // The saved model is selected again too, to pick up its current name and capabilities.
+            if let model = loaded.first(where: { $0.id == settings.claudeModel }) ?? loaded.first {
+                settings.selectClaudeModel(model)
             }
         } catch {
             guard !Task.isCancelled else { return }

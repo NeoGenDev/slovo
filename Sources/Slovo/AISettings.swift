@@ -80,6 +80,11 @@ final class AISettings {
         didSet { UserDefaults.standard.set(claudeModel, forKey: Keys.claudeModel) }
     }
 
+    /// The model's display name from the list, e.g. "Claude Opus 5.5", for the "Improved by" caption.
+    private(set) var claudeModelName: String {
+        didSet { UserDefaults.standard.set(claudeModelName, forKey: Keys.claudeModelName) }
+    }
+
     /// Remembered with the model so a request doesn't need the model list first.
     var claudeModelSupportsLowEffort: Bool {
         didSet { UserDefaults.standard.set(claudeModelSupportsLowEffort, forKey: Keys.claudeModelSupportsLowEffort) }
@@ -102,6 +107,7 @@ final class AISettings {
     private enum Keys {
         static let provider = "aiProvider"
         static let claudeModel = "claudeModel"
+        static let claudeModelName = "claudeModelName"
         static let claudeModelSupportsLowEffort = "claudeModelSupportsLowEffort"
         static let openAIBaseURL = "openAIBaseURL"
         static let openAIModel = "openAIModel"
@@ -115,6 +121,7 @@ final class AISettings {
         let defaults = UserDefaults.standard
         provider = defaults.string(forKey: Keys.provider).flatMap(AIProvider.init(rawValue:)) ?? .claude
         claudeModel = defaults.string(forKey: Keys.claudeModel) ?? ""
+        claudeModelName = defaults.string(forKey: Keys.claudeModelName) ?? ""
         claudeModelSupportsLowEffort = defaults.object(forKey: Keys.claudeModelSupportsLowEffort) as? Bool ?? true
         openAIBaseURL = defaults.string(forKey: Keys.openAIBaseURL) ?? Self.defaultOpenAIBaseURL
         openAIModel = defaults.string(forKey: Keys.openAIModel) ?? ""
@@ -148,10 +155,11 @@ final class AISettings {
         return url
     }
 
-    /// The name shown after a successful rewrite: "Claude", or the OpenAI-compatible model's name.
+    /// The name shown after a successful rewrite: the Claude model's name ("Claude" until the model list
+    /// has been seen), or the OpenAI-compatible model's ID.
     var improverName: String {
         switch provider {
-        case .claude: "Claude"
+        case .claude: claudeModelName.isEmpty ? "Claude" : claudeModelName
         case .openAICompatible: openAIModel.trimmingCharacters(in: .whitespaces)
         }
     }
@@ -172,6 +180,7 @@ final class AISettings {
 
     func selectClaudeModel(_ model: ClaudeModel) {
         claudeModel = model.id
+        claudeModelName = model.name
         claudeModelSupportsLowEffort = model.supportsLowEffort
     }
 
